@@ -1,6 +1,8 @@
 package com.skillstorm.services;
 
+import com.skillstorm.constants.EventType;
 import com.skillstorm.dtos.FormDto;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -18,4 +20,7 @@ public interface FormService {
 
     // Delete by ID:
     Mono<Void> deleteById(UUID id);
+
+    // Get all EventTypes:
+    Flux<EventType> getEventTypes();
 }
