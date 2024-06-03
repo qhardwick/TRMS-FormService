@@ -1,9 +1,11 @@
 package com.skillstorm.controllers;
 
+import com.skillstorm.constants.EventType;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.services.FormService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -47,5 +49,11 @@ public class FormController {
     @DeleteMapping("/{id}")
     public Mono<Void> deleteById(@PathVariable("id") UUID id) {
         return formService.deleteById(id);
+    }
+
+    // Get EventTypes. Used to populate a list for the user to choose from:
+    @GetMapping("/events")
+    public Flux<EventType> getEventTypes() {
+        return formService.getEventTypes();
     }
 }

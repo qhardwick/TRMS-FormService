@@ -35,6 +35,15 @@
                 <scope>import</scope>
             </dependency>
 
+            <!-- Ensures AWS SDK dependencies compatible with specified version -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>2.17.71</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- Dependency manager for Datastax -->
             <dependency>
                 <groupId>com.datastax.oss</groupId>
@@ -65,6 +74,12 @@
             <groupId>software.aws.mcs</groupId>
             <artifactId>aws-sigv4-auth-cassandra-java-driver-plugin</artifactId>
             <version>4.0.6</version>
+        </dependency>
+
+        <!-- AWS S3 SDK -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
         </dependency>
 
         <!-- Gives us Spring Security. Even if in a secure environment we may still want to use
