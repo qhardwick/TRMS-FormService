@@ -3,7 +3,9 @@ package com.skillstorm.services;
 import com.skillstorm.constants.EventType;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.exceptions.FormNotFoundException;
+import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
+import com.skillstorm.utils.DownloadResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -58,5 +60,83 @@ public class FormServiceImpl implements FormService {
     @Override
     public Flux<EventType> getEventTypes() {
         return EventType.getEventTypes();
+    }
+
+    // Upload Event attachment to S3:
+    @Override
+    public Mono<FormDto> uploadEventAttachment(UUID id, String contentType, byte[] attachment) {
+
+        // Verify attachment it of type pdf, png, jpeg, txt, or doc:
+        return switch (contentType) {
+            case "application/pdf", "image/png", "image/jpg", "image/jpeg", "text/plain",
+                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ->
+                    findById(id).flatMap(formDto -> uploadToS3(contentType, attachment).flatMap(key -> {
+                        formDto.setAttachment(key);
+                        return formRepository.save(formDto.mapToEntity()).map(FormDto::new);
+                    }));
+
+            // Handle unsupported file format:
+            default ->
+                Mono.error(new UnsupportedFileTypeException("attachment.format.must"));
+        };
+    }
+
+    // Upload Supervisor pre-approval attachment to S3:
+    @Override
+    public Mono<FormDto> uploadSupervisorAttachment(UUID id, String contentType, byte[] attachment) {
+
+        // Verify attachment is of type .msg:
+        if(!"application/vnd.ms-outlook".equalsIgnoreCase(contentType)) {
+            return Mono.error(new UnsupportedFileTypeException("file.msg.must"));
+        }
+
+        // Upload the attachment to S3 and set the key:
+        return findById(id).flatMap(formDto -> uploadToS3(contentType, attachment).flatMap(key -> {
+            formDto.setSupervisorAttachment(key);
+            return formRepository.save(formDto.mapToEntity()).map(FormDto::new);
+        }));
+    }
+
+    // Upload Department Head pre-approval attachment to S3:
+    @Override
+    public Mono<FormDto> uploadDepartmentHeadAttachment(UUID id, String contentType, byte[] attachment) {
+
+        // Verify attachment is of type .msg:
+        if(!"application/vnd.ms-outlook".equalsIgnoreCase(contentType)) {
+            return Mono.error(new UnsupportedFileTypeException("file.msg.must"));
+        }
+
+        // Upload the attachment to S3 and set the key:
+        return findById(id).flatMap(formDto -> uploadToS3(contentType, attachment).flatMap(key -> {
+            formDto.setDepartmentHeadAttachment(key);
+            return formRepository.save(formDto.mapToEntity()).map(FormDto::new);
+        }));
+    }
+
+    // Download Event attachment from S3:
+    @Override
+    public Mono<DownloadResponse> downloadEventAttachment(UUID id) {
+        return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getAttachment()));
+    }
+
+    // Download Supervisor attachment from S3:
+    @Override
+    public Mono<DownloadResponse> downloadSupervisorAttachment(UUID id) {
+        return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getSupervisorAttachment()));
+    }
+
+    // Download Department Head attachment from S3:
+    @Override
+    public Mono<DownloadResponse> downloadDepartmentHeadAttachment(UUID id) {
+        return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getDepartmentHeadAttachment()));
+    }
+
+    // Method to perform the actual S3 upload:
+    private Mono<String> uploadToS3(String contentType, byte[] attachment) {
+        return Mono.defer(() -> {
+            String key = UUID.randomUUID().toString();
+            return s3Service.uploadFile(key, contentType, attachment)
+                    .thenReturn(key);
+        });
     }
 }

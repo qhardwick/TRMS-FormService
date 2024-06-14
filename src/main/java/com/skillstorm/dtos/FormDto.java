@@ -19,15 +19,19 @@ public class FormDto {
 
     private UUID id;
 
+    @NotNull(message = "{username.must}")
     @Size(min = 3, max = 25, message = "{username.size}")
     private String username;
 
+    @NotNull(message = "{firstname.must}")
     @Size(min = 2, max = 50, message = "{firstname.size}")
     private String firstName;
 
+    @NotNull(message = "{lastname.must}")
     @Size(min = 2, max = 50, message = "{lastname.size}")
     private String lastName;
 
+    @NotNull(message = "{email.must")
     @Pattern(regexp = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", message = "{email.invalid}")
     private String email;
 
@@ -52,6 +56,7 @@ public class FormDto {
     @Min(value = 0, message = "{event.cost.must}")
     private BigDecimal cost;
 
+    // TODO: Table entity or enum?
     //@NotNull(message = "{grade.format.must}")
     //private GradeFormat gradeFormat;
 
@@ -82,7 +87,7 @@ public class FormDto {
 
     public FormDto() {
         this.id = UUID.randomUUID();
-        this.status = Status.REQUESTED;
+        this.status = Status.CREATED;
     }
 
     public FormDto(Form form) {
