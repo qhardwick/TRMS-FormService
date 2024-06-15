@@ -42,4 +42,7 @@ public interface FormService {
 
     // Download Department Head attachment from S3:
     Mono<DownloadResponse> downloadDepartmentHeadAttachment(UUID id);
+
+    // Submit Form for Supervisor Approval:
+    Mono<FormDto> submitForSupervisorApproval(UUID id, String username);
 }

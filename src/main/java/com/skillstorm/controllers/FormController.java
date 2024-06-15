@@ -112,4 +112,10 @@ public class FormController {
             return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType)).body(resource);
         });
     }
+
+    // Submit Form for Supervisor Approval:
+    @PostMapping("/{id}/submit")
+    public Mono<FormDto> submit(@PathVariable("id") UUID id, @RequestHeader("username") String username) {
+        return formService.submitForSupervisorApproval(id, username);
+    }
 }

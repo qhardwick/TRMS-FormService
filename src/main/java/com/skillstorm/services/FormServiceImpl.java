@@ -131,6 +131,12 @@ public class FormServiceImpl implements FormService {
         return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getDepartmentHeadAttachment()));
     }
 
+    // Submit Form for Supervisor Approval:
+    @Override
+    public Mono<FormDto> submitForSupervisorApproval(UUID id, String username) {
+        return null;
+    }
+
     // Method to perform the actual S3 upload:
     private Mono<String> uploadToS3(String contentType, byte[] attachment) {
         return Mono.defer(() -> {
