@@ -16,6 +16,9 @@ public interface FormService {
     // Find Form by ID:
     Mono<FormDto> findById(UUID id);
 
+    // Find all Forms:
+    Flux<FormDto> findAll();
+
     // Update Form by ID:
     Mono<FormDto> updateById(UUID id, FormDto updatedForm);
 
