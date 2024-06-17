@@ -44,6 +44,12 @@ public class FormController {
         return formService.findById(id);
     }
 
+    // Find all Forms. Test utility for now, but may eventually return all Forms created by a specific User:
+    @GetMapping
+    public Flux<FormDto> findAll() {
+        return formService.findAll();
+    }
+
     // Update Form by ID:
     @PutMapping("/{id}")
     public Mono<FormDto> updateById(@PathVariable("id") UUID id, @RequestBody FormDto updatedForm) {

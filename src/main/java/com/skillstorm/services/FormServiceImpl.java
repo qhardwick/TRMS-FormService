@@ -40,6 +40,13 @@ public class FormServiceImpl implements FormService {
                 .switchIfEmpty(Mono.error(new FormNotFoundException("form.not.found", id)));
     }
 
+    // Find all Forms:
+    @Override
+    public Flux<FormDto> findAll() {
+        return formRepository.findAll()
+                .map(FormDto::new);
+    }
+
     // Update Form by ID:
     // TODO: Check for existence prior to saving
     @Override
