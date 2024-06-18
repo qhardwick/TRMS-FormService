@@ -1,13 +1,16 @@
 package com.skillstorm.services;
 
 import com.skillstorm.constants.EventType;
+import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
 import com.skillstorm.utils.DownloadResponse;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -18,11 +21,15 @@ public class FormServiceImpl implements FormService {
 
     private final FormRepository formRepository;
     private final S3Service s3Service;
+    private final RabbitTemplate rabbitTemplate;
+    //private final TransactionalOperator transactionalOperator;
 
     @Autowired
-    public FormServiceImpl(FormRepository formRepository, S3Service s3Service) {
+    public FormServiceImpl(FormRepository formRepository, S3Service s3Service, RabbitTemplate rabbitTemplate/*, TransactionalOperator transactionalOperator*/) {
         this.formRepository = formRepository;
         this.s3Service =s3Service;
+        this.rabbitTemplate = rabbitTemplate;
+        //this.transactionalOperator = transactionalOperator;
     }
 
     // Create new Form:
@@ -139,9 +146,57 @@ public class FormServiceImpl implements FormService {
     }
 
     // Submit Form for Supervisor Approval:
+    // TODO: Configure Transactional Operator for Autowiring
     @Override
     public Mono<FormDto> submitForSupervisorApproval(UUID id, String username) {
-        return null;
+        // Pull the Form from the database and update its status to REQUESTED:
+        return findById(id).flatMap(formDto -> {
+            formDto.setStatus(Status.REQUESTED);
+
+            // If Form contains Supervisor preapproval attachment, move on to Department Head approval:
+            if(formDto.getSupervisorAttachment() != null) {
+                return formRepository.save(formDto.mapToEntity())
+                        .then(submitForDepartmentHeadApproval(id, username));
+            }
+
+            // Otherwise, post message to Supervisor Inbox:
+            return sendToSupervisor(id, username)
+                    .then(formRepository.save(formDto.mapToEntity())).map(FormDto::new);
+
+            // Ensure that Form Status update is only saved if the request completes without error:
+        })//.as(transactionalOperator::transactional);
+        ;
+    }
+
+    // Submit Form for Department Head approval:
+    public Mono<FormDto> submitForDepartmentHeadApproval(UUID id, String username) {
+        return findById(id).flatMap(formDto -> {
+            if(formDto.getDepartmentHeadAttachment() != null) {
+                return sendToBenefitsCoordinator(id, username)
+                        .thenReturn(formDto);
+            }
+            return sendToDepartmentHead(id, username)
+                    .thenReturn(formDto);
+        });
+    }
+
+    // Send to Supervisor's Inbox:
+    // TODO: Send id and supervisor username to Inbox service. May need to create an object to store them in.
+    private Mono<Void> sendToSupervisor(UUID id, String username) {
+        return Mono.fromCallable(() -> {
+                String supervisor = (String) rabbitTemplate.convertSendAndReceive("supervisor-lookup-queue", username);
+                return null;
+        });
+    }
+
+    // Send to Department Head's Inbox:
+    private Mono<Void> sendToDepartmentHead(UUID id, String username) {
+        return Mono.empty();
+    }
+
+    // Send to BENCO's Inbox:
+    private Mono<Void> sendToBenefitsCoordinator(UUID id, String username) {
+        return Mono.empty();
     }
 
     // Method to perform the actual S3 upload:
