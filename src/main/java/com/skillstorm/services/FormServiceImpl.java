@@ -1,20 +1,28 @@
 package com.skillstorm.services;
 
 import com.skillstorm.constants.EventType;
+import com.skillstorm.constants.Queues;
 import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.FormDto;
+import com.skillstorm.dtos.MessageDto;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
 import com.skillstorm.utils.DownloadResponse;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
 
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class FormServiceImpl implements FormService {
@@ -22,14 +30,14 @@ public class FormServiceImpl implements FormService {
     private final FormRepository formRepository;
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
-    //private final TransactionalOperator transactionalOperator;
+    private final Map<String, MonoSink<String>> correlationMap;
 
     @Autowired
-    public FormServiceImpl(FormRepository formRepository, S3Service s3Service, RabbitTemplate rabbitTemplate/*, TransactionalOperator transactionalOperator*/) {
+    public FormServiceImpl(FormRepository formRepository, S3Service s3Service, RabbitTemplate rabbitTemplate) {
         this.formRepository = formRepository;
         this.s3Service =s3Service;
         this.rabbitTemplate = rabbitTemplate;
-        //this.transactionalOperator = transactionalOperator;
+        this.correlationMap = new ConcurrentHashMap<>();
     }
 
     // Create new Form:
@@ -146,7 +154,6 @@ public class FormServiceImpl implements FormService {
     }
 
     // Submit Form for Supervisor Approval:
-    // TODO: Configure Transactional Operator for Autowiring
     @Override
     public Mono<FormDto> submitForSupervisorApproval(UUID id, String username) {
         // Pull the Form from the database and update its status to REQUESTED:
@@ -160,12 +167,10 @@ public class FormServiceImpl implements FormService {
             }
 
             // Otherwise, post message to Supervisor Inbox:
-            return sendToSupervisor(id, username)
+            return getSupervisor(username)
+                    .map(supervisor -> sendMessageToInbox(id, supervisor))
                     .then(formRepository.save(formDto.mapToEntity())).map(FormDto::new);
-
-            // Ensure that Form Status update is only saved if the request completes without error:
-        })//.as(transactionalOperator::transactional);
-        ;
+        });
     }
 
     // Submit Form for Department Head approval:
@@ -180,14 +185,31 @@ public class FormServiceImpl implements FormService {
         });
     }
 
-    // Send to Supervisor's Inbox:
-    // TODO: Send id and supervisor username to Inbox service. May need to create an object to store them in.
-    private Mono<Void> sendToSupervisor(UUID id, String username) {
-        return Mono.fromCallable(() -> {
-                String supervisor = (String) rabbitTemplate.convertSendAndReceive("supervisor-lookup-queue", username);
-                return null;
+    // Query for Supervisor from User-Service:
+    private Mono<String> getSupervisor(String username) {
+        return Mono.create(sink -> {
+            String correlationId = UUID.randomUUID().toString();
+            correlationMap.put(correlationId, sink);
+            rabbitTemplate.convertAndSend(Queues.SUPERVISOR_LOOKUP.getQueue(), username, correlationId);
         });
     }
+
+    // Return Supervisor's username to getSupervisor:
+    @RabbitListener(queues = "supervisor-response-queue")
+    private Mono<Void> awaitSupervisorResponse(@Payload String supervisor, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+        MonoSink<String> sink = correlationMap.remove(correlationId);
+        if(sink != null) {
+            sink.success(supervisor);
+        }
+        return Mono.empty();
+    }
+
+    // Send a message to a User's Inbox:
+    private Mono<Void> sendMessageToInbox(UUID id, String username) {
+        MessageDto message = new MessageDto(id, username);
+        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.INBOX.getQueue(), message));
+    }
+
 
     // Send to Department Head's Inbox:
     private Mono<Void> sendToDepartmentHead(UUID id, String username) {
