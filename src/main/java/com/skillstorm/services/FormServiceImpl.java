@@ -9,6 +9,8 @@ import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
 import com.skillstorm.utils.DownloadResponse;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -158,18 +160,18 @@ public class FormServiceImpl implements FormService {
     public Mono<FormDto> submitForSupervisorApproval(UUID id, String username) {
         // Pull the Form from the database and update its status to REQUESTED:
         return findById(id).flatMap(formDto -> {
-            formDto.setStatus(Status.REQUESTED);
 
             // If Form contains Supervisor preapproval attachment, move on to Department Head approval:
             if(formDto.getSupervisorAttachment() != null) {
-                return formRepository.save(formDto.mapToEntity())
-                        .then(submitForDepartmentHeadApproval(id, username));
+                return submitForDepartmentHeadApproval(id, username);
             }
 
             // Otherwise, post message to Supervisor Inbox:
+            formDto.setStatus(Status.AWAITING_SUPERVISOR_APPROVAL);
             return getSupervisor(username)
                     .map(supervisor -> sendMessageToInbox(id, supervisor))
-                    .then(formRepository.save(formDto.mapToEntity())).map(FormDto::new);
+                    .then(formRepository.save(formDto.mapToEntity()))
+                    .map(FormDto::new);
         });
     }
 
@@ -177,20 +179,42 @@ public class FormServiceImpl implements FormService {
     public Mono<FormDto> submitForDepartmentHeadApproval(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
             if(formDto.getDepartmentHeadAttachment() != null) {
-                return sendToBenefitsCoordinator(id, username)
-                        .thenReturn(formDto);
+                return submitForBencoApproval(id, username);
             }
-            return sendToDepartmentHead(id, username)
-                    .thenReturn(formDto);
+            formDto.setStatus(Status.AWAITING_DEPARTMENT_HEAD_APPROVAL);
+            return getDepartmentHead(username)
+                    .map(departmentHead -> sendMessageToInbox(id, departmentHead))
+                    .then(formRepository.save(formDto.mapToEntity()))
+                    .map(FormDto::new);
+        });
+    }
+
+    // Submit Form for Benco approval:
+    public Mono<FormDto> submitForBencoApproval(UUID id, String username) {
+        return findById(id).flatMap(formDto -> {
+            formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);
+            return getBenco(username)
+                    .map(benco -> sendMessageToInbox(id, benco))
+                    .then(formRepository.save(formDto.mapToEntity()))
+                    .map(FormDto::new);
         });
     }
 
     // Query for Supervisor from User-Service:
+    // TODO: Try to refactor these into single reusable methods. Maybe send username + queue names in the argument:
     private Mono<String> getSupervisor(String username) {
         return Mono.create(sink -> {
             String correlationId = UUID.randomUUID().toString();
             correlationMap.put(correlationId, sink);
-            rabbitTemplate.convertAndSend(Queues.SUPERVISOR_LOOKUP.getQueue(), username, correlationId);
+
+            Message message = MessageBuilder
+                    .withBody(username.getBytes())
+                    .setCorrelationId(correlationId)
+                    .build();
+
+            message.getMessageProperties().setReplyTo(Queues.SUPERVISOR_RESPONSE.getQueue());
+
+            rabbitTemplate.send(Queues.SUPERVISOR_LOOKUP.getQueue(), message);
         });
     }
 
@@ -204,21 +228,64 @@ public class FormServiceImpl implements FormService {
         return Mono.empty();
     }
 
+    // Query for Department Head from User-Service:
+    private Mono<String> getDepartmentHead(String username) {
+        return Mono.create(sink -> {
+            String correlationId = UUID.randomUUID().toString();
+            correlationMap.put(correlationId, sink);
+
+            Message message = MessageBuilder
+                    .withBody(username.getBytes())
+                    .setCorrelationId(correlationId)
+                    .build();
+
+            message.getMessageProperties().setReplyTo(Queues.DEPARTMENT_HEAD_RESPONSE.getQueue());
+
+            rabbitTemplate.send(Queues.DEPARTMENT_HEAD_LOOKUP.getQueue(), message);
+        });
+    }
+
+    // Return Department Head's username to getDepartmentHead:
+    @RabbitListener(queues = "department-head-response-queue")
+    private Mono<Void> awaitDepartmentHeadResponse(@Payload String departmentHead, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+        MonoSink<String> sink = correlationMap.remove(correlationId);
+        if(sink != null) {
+            sink.success(departmentHead);
+        }
+        return Mono.empty();
+    }
+
+    // Query for Benefits Coordinator from User-Service:
+    private Mono<String> getBenco(String username) {
+        return Mono.create(sink -> {
+            String correlationId = UUID.randomUUID().toString();
+            correlationMap.put(correlationId, sink);
+
+            Message message = MessageBuilder
+                    .withBody(username.getBytes())
+                    .setCorrelationId(correlationId)
+                    .build();
+
+            message.getMessageProperties().setReplyTo(Queues.BENCO_RESPONSE.getQueue());
+
+            rabbitTemplate.send(Queues.BENCO_LOOKUP.getQueue(), message);
+        });
+    }
+
+    // Return Benefits Coordinator's username to getBenco:
+    @RabbitListener(queues = "benco-response-queue")
+    private Mono<Void> awaitBencoResponse(@Payload String benco, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+        MonoSink<String> sink = correlationMap.remove(correlationId);
+        if(sink != null) {
+            sink.success(benco);
+        }
+        return Mono.empty();
+    }
+
     // Send a message to a User's Inbox:
     private Mono<Void> sendMessageToInbox(UUID id, String username) {
         MessageDto message = new MessageDto(id, username);
         return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.INBOX.getQueue(), message));
-    }
-
-
-    // Send to Department Head's Inbox:
-    private Mono<Void> sendToDepartmentHead(UUID id, String username) {
-        return Mono.empty();
-    }
-
-    // Send to BENCO's Inbox:
-    private Mono<Void> sendToBenefitsCoordinator(UUID id, String username) {
-        return Mono.empty();
     }
 
     // Method to perform the actual S3 upload:

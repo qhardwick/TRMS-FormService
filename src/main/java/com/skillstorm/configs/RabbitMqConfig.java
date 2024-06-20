@@ -1,7 +1,6 @@
 package com.skillstorm.configs;
 
 import com.skillstorm.constants.Queues;
-import lombok.Getter;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -10,7 +9,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@Getter
 public class RabbitMqConfig {
 
     @Value("${AWS_HOSTNAME:localhost}")
@@ -19,25 +17,6 @@ public class RabbitMqConfig {
     // Exchanges:
     @Value("${exchanges.direct}")
     private String directExchange;
-
-    // Routing keys:
-    @Value("${routing-keys.lookup.supervisor")
-    private String supervisorLookupKey;
-
-    @Value("${routing-keys.lookup.department-head")
-    private String departmentHeadLookupKey;
-
-    @Value("$routing-keys.lookup.benco")
-    private String bencoLookupKey;
-
-    @Value("${routing-keys.response.supervisor")
-    private String supervisorResponseKey;
-
-    @Value("${routing-keys.response.department-head")
-    private String departmentHeadResponseKey;
-
-    @Value("$routing-keys.response.benco")
-    private String bencoResponseKey;
 
     // Set up credentials and connect to RabbitMQ:
     @Bean
@@ -93,13 +72,18 @@ public class RabbitMqConfig {
         return new Queue(Queues.BENCO_RESPONSE.getQueue());
     }
 
+    @Bean
+    public Queue inboxQueue() {
+        return new Queue(Queues.INBOX.getQueue());
+    }
+
 
     // Bind the queues to the exchange:
     @Bean
     public Binding supervisorLookupBinding(Queue supervisorLookupQueue, Exchange directExchange) {
         return BindingBuilder.bind(supervisorLookupQueue)
                 .to(directExchange)
-                .with(supervisorLookupKey)
+                .with(Queues.SUPERVISOR_LOOKUP.getQueue())
                 .noargs();
     }
 
@@ -107,7 +91,7 @@ public class RabbitMqConfig {
     public Binding departmentHeadLookupBinding(Queue departmentHeadLookupQueue, Exchange directExchange) {
         return BindingBuilder.bind(departmentHeadLookupQueue)
                 .to(directExchange)
-                .with(departmentHeadLookupKey)
+                .with(Queues.DEPARTMENT_HEAD_LOOKUP.getQueue())
                 .noargs();
     }
 
@@ -115,7 +99,7 @@ public class RabbitMqConfig {
     public Binding bencoLookupBinding(Queue bencoLookupQueue, Exchange directExchange) {
         return BindingBuilder.bind(bencoLookupQueue)
                 .to(directExchange)
-                .with(bencoLookupKey)
+                .with(Queues.BENCO_LOOKUP.getQueue())
                 .noargs();
     }
 
@@ -123,7 +107,7 @@ public class RabbitMqConfig {
     public Binding supervisorResponseBinding(Queue supervisorResponseQueue, Exchange directExchange) {
         return BindingBuilder.bind(supervisorResponseQueue)
                 .to(directExchange)
-                .with(supervisorResponseKey)
+                .with(Queues.SUPERVISOR_RESPONSE.getQueue())
                 .noargs();
     }
 
@@ -131,7 +115,7 @@ public class RabbitMqConfig {
     public Binding departmentHeadResponseBinding(Queue departmentHeadResponseQueue, Exchange directExchange) {
         return BindingBuilder.bind(departmentHeadResponseQueue)
                 .to(directExchange)
-                .with(departmentHeadResponseKey)
+                .with(Queues.DEPARTMENT_HEAD_RESPONSE.getQueue())
                 .noargs();
     }
 
@@ -139,7 +123,15 @@ public class RabbitMqConfig {
     public Binding bencoResponseBinding(Queue bencoResponseQueue, Exchange directExchange) {
         return BindingBuilder.bind(bencoResponseQueue)
                 .to(directExchange)
-                .with(bencoResponseKey)
+                .with(Queues.BENCO_RESPONSE.getQueue())
+                .noargs();
+    }
+
+    @Bean
+    public Binding inboxBindibg(Queue inboxQueue, Exchange directExchange) {
+        return BindingBuilder.bind(inboxQueue)
+                .to(directExchange)
+                .with(Queues.INBOX.getQueue())
                 .noargs();
     }
 }
