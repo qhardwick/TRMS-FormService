@@ -31,23 +31,6 @@ spring:
 exchanges:
   direct: direct-exchange
 
-queues:
-  lookup:
-    supervisor: supervisor-lookup-queue
-    department-head: department-head-lookup-queue
-    benco: benco-lookup-queue
-    reponse: lookup-response-queue
-
-routing-keys:
-  lookup:
-    supervisor: supervisor-lookup
-    department-head: department-head-lookup
-    benco: benco-lookup
-  response:
-    supervisor: supervisor-response
-    department-head: department-head-response
-    benco: benco-response
-
 # Configure logging levels:
 logging:
   level:

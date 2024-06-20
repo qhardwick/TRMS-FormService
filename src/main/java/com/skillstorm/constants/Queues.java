@@ -8,9 +8,9 @@ public enum Queues {
     DEPARTMENT_HEAD_LOOKUP("department-head-lookup-queue"),
     BENCO_LOOKUP("benco-lookup-queue"),
     SUPERVISOR_RESPONSE("supervisor-response-queue"),
-    DEPARTMENT_HEAD_RESPONSE("department-head-response"),
-    BENCO_RESPONSE("benco-response"),
-    INBOX("queues.inbox");
+    DEPARTMENT_HEAD_RESPONSE("department-head-response-queue"),
+    BENCO_RESPONSE("benco-response-queue"),
+    INBOX("queues.inbox-queue");
 
     private final String queue;
 
