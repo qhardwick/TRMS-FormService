@@ -8,7 +8,7 @@ import com.skillstorm.dtos.MessageDto;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
-import com.skillstorm.utils.DownloadResponse;
+import com.skillstorm.dtos.DownloadResponseDto;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -139,19 +139,19 @@ public class FormServiceImpl implements FormService {
 
     // Download Event attachment from S3:
     @Override
-    public Mono<DownloadResponse> downloadEventAttachment(UUID id) {
+    public Mono<DownloadResponseDto> downloadEventAttachment(UUID id) {
         return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getAttachment()));
     }
 
     // Download Supervisor attachment from S3:
     @Override
-    public Mono<DownloadResponse> downloadSupervisorAttachment(UUID id) {
+    public Mono<DownloadResponseDto> downloadSupervisorAttachment(UUID id) {
         return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getSupervisorAttachment()));
     }
 
     // Download Department Head attachment from S3:
     @Override
-    public Mono<DownloadResponse> downloadDepartmentHeadAttachment(UUID id) {
+    public Mono<DownloadResponseDto> downloadDepartmentHeadAttachment(UUID id) {
         return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getDepartmentHeadAttachment()));
     }
 
@@ -176,6 +176,7 @@ public class FormServiceImpl implements FormService {
     }
 
     // Submit Form for Department Head approval:
+    @Override
     public Mono<FormDto> submitForDepartmentHeadApproval(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
             if(formDto.getDepartmentHeadAttachment() != null) {
@@ -190,6 +191,7 @@ public class FormServiceImpl implements FormService {
     }
 
     // Submit Form for Benco approval:
+    @Override
     public Mono<FormDto> submitForBencoApproval(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
             formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);

@@ -124,4 +124,16 @@ public class FormController {
     public Mono<FormDto> submit(@PathVariable("id") UUID id, @RequestHeader("username") String username) {
         return formService.submitForSupervisorApproval(id, username);
     }
+
+    // Submit Form for Department Head approval (should only be used by Supervisor):
+    @PostMapping("/{id}/submit-to-department-head")
+    public Mono<FormDto> submitToDepartmentHead(@PathVariable("id") UUID id, @RequestHeader("username") String supervisor) {
+        return formService.submitForDepartmentHeadApproval(id, supervisor);
+    }
+
+    // Submit Form for Benco approval (should only be used by Department Head):
+    @PostMapping("/{id}/submit-to-benco")
+    public Mono<FormDto> submitToBenco(@PathVariable("id") UUID id, @RequestHeader("username") String departmentHead) {
+        return formService.submitForBencoApproval(id, departmentHead);
+    }
 }
