@@ -1,6 +1,6 @@
 package com.skillstorm.services;
 
-import com.skillstorm.utils.DownloadResponse;
+import com.skillstorm.dtos.DownloadResponseDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -58,7 +58,7 @@ public class S3ServiceImpl implements S3Service {
 
     // Download file from S3 Bucket:
     @Override
-    public Mono<DownloadResponse> getObject(String key) {
+    public Mono<DownloadResponseDto> getObject(String key) {
 
         // Establish which object we're trying to pull and from which bucket:
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
@@ -80,7 +80,7 @@ public class S3ServiceImpl implements S3Service {
         }).map(responseBytes -> {
             try (InputStream inputStream = new ByteArrayInputStream(responseBytes.asByteArray())) {
                 String contentType = responseBytes.response().contentType();
-                return new DownloadResponse(inputStream, contentType);
+                return new DownloadResponseDto(inputStream, contentType);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to create input stream from S3 response", e);
             }

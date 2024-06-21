@@ -2,7 +2,7 @@ package com.skillstorm.services;
 
 import com.skillstorm.constants.EventType;
 import com.skillstorm.dtos.FormDto;
-import com.skillstorm.utils.DownloadResponse;
+import com.skillstorm.dtos.DownloadResponseDto;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -38,14 +38,20 @@ public interface FormService {
     Mono<FormDto> uploadDepartmentHeadAttachment(UUID id, String contentType, byte[] attachment);
 
     // Download Event attachment from S3:
-    Mono<DownloadResponse> downloadEventAttachment(UUID id);
+    Mono<DownloadResponseDto> downloadEventAttachment(UUID id);
 
     // Download Supervisor attachment from S3:
-    Mono<DownloadResponse> downloadSupervisorAttachment(UUID id);
+    Mono<DownloadResponseDto> downloadSupervisorAttachment(UUID id);
 
     // Download Department Head attachment from S3:
-    Mono<DownloadResponse> downloadDepartmentHeadAttachment(UUID id);
+    Mono<DownloadResponseDto> downloadDepartmentHeadAttachment(UUID id);
 
     // Submit Form for Supervisor Approval:
     Mono<FormDto> submitForSupervisorApproval(UUID id, String username);
+
+    // Submit Form for Department Head approval:
+    Mono<FormDto> submitForDepartmentHeadApproval(UUID id, String username);
+
+    // Submit Form for Benco approval:
+    Mono<FormDto> submitForBencoApproval(UUID id, String username);
 }
