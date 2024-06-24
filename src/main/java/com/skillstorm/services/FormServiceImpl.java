@@ -168,7 +168,7 @@ public class FormServiceImpl implements FormService {
 
             // Otherwise, post message to Supervisor Inbox:
             formDto.setStatus(Status.AWAITING_SUPERVISOR_APPROVAL);
-            return getSupervisor(username)
+            return getApprover(username, Queues.SUPERVISOR_LOOKUP, Queues.SUPERVISOR_RESPONSE)
                     .map(supervisor -> sendMessageToInbox(id, supervisor))
                     .then(formRepository.save(formDto.mapToEntity()))
                     .map(FormDto::new);
@@ -183,7 +183,7 @@ public class FormServiceImpl implements FormService {
                 return submitForBencoApproval(id, username);
             }
             formDto.setStatus(Status.AWAITING_DEPARTMENT_HEAD_APPROVAL);
-            return getDepartmentHead(username)
+            return getApprover(username, Queues.DEPARTMENT_HEAD_LOOKUP, Queues.DEPARTMENT_HEAD_RESPONSE)
                     .map(departmentHead -> sendMessageToInbox(id, departmentHead))
                     .then(formRepository.save(formDto.mapToEntity()))
                     .map(FormDto::new);
@@ -195,16 +195,15 @@ public class FormServiceImpl implements FormService {
     public Mono<FormDto> submitForBencoApproval(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
             formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);
-            return getBenco(username)
+            return getApprover(username, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE)
                     .map(benco -> sendMessageToInbox(id, benco))
                     .then(formRepository.save(formDto.mapToEntity()))
                     .map(FormDto::new);
         });
     }
 
-    // Query for Supervisor from User-Service:
-    // TODO: Try to refactor these into single reusable methods. Maybe send username + queue names in the argument:
-    private Mono<String> getSupervisor(String username) {
+    // Send a request to the User-Service to look up an approver based on the employee's username (direct supervisor, department head, benco):
+    private Mono<String> getApprover(String username, Queues lookupQueue, Queues responseQueue) {
         return Mono.create(sink -> {
             String correlationId = UUID.randomUUID().toString();
             correlationMap.put(correlationId, sink);
@@ -214,72 +213,17 @@ public class FormServiceImpl implements FormService {
                     .setCorrelationId(correlationId)
                     .build();
 
-            message.getMessageProperties().setReplyTo(Queues.SUPERVISOR_RESPONSE.getQueue());
-
-            rabbitTemplate.send(Queues.SUPERVISOR_LOOKUP.getQueue(), message);
+            message.getMessageProperties().setReplyTo(responseQueue.getQueue());
+            rabbitTemplate.send(lookupQueue.getQueue(), message);
         });
     }
 
-    // Return Supervisor's username to getSupervisor:
-    @RabbitListener(queues = "supervisor-response-queue")
-    private Mono<Void> awaitSupervisorResponse(@Payload String supervisor, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+    // Return approver's username to getApprover:
+    @RabbitListener(queues = {"supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
+    private Mono<Void> awaitApproverResponse(@Payload String supervisor, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
         MonoSink<String> sink = correlationMap.remove(correlationId);
         if(sink != null) {
             sink.success(supervisor);
-        }
-        return Mono.empty();
-    }
-
-    // Query for Department Head from User-Service:
-    private Mono<String> getDepartmentHead(String username) {
-        return Mono.create(sink -> {
-            String correlationId = UUID.randomUUID().toString();
-            correlationMap.put(correlationId, sink);
-
-            Message message = MessageBuilder
-                    .withBody(username.getBytes())
-                    .setCorrelationId(correlationId)
-                    .build();
-
-            message.getMessageProperties().setReplyTo(Queues.DEPARTMENT_HEAD_RESPONSE.getQueue());
-
-            rabbitTemplate.send(Queues.DEPARTMENT_HEAD_LOOKUP.getQueue(), message);
-        });
-    }
-
-    // Return Department Head's username to getDepartmentHead:
-    @RabbitListener(queues = "department-head-response-queue")
-    private Mono<Void> awaitDepartmentHeadResponse(@Payload String departmentHead, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
-        MonoSink<String> sink = correlationMap.remove(correlationId);
-        if(sink != null) {
-            sink.success(departmentHead);
-        }
-        return Mono.empty();
-    }
-
-    // Query for Benefits Coordinator from User-Service:
-    private Mono<String> getBenco(String username) {
-        return Mono.create(sink -> {
-            String correlationId = UUID.randomUUID().toString();
-            correlationMap.put(correlationId, sink);
-
-            Message message = MessageBuilder
-                    .withBody(username.getBytes())
-                    .setCorrelationId(correlationId)
-                    .build();
-
-            message.getMessageProperties().setReplyTo(Queues.BENCO_RESPONSE.getQueue());
-
-            rabbitTemplate.send(Queues.BENCO_LOOKUP.getQueue(), message);
-        });
-    }
-
-    // Return Benefits Coordinator's username to getBenco:
-    @RabbitListener(queues = "benco-response-queue")
-    private Mono<Void> awaitBencoResponse(@Payload String benco, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
-        MonoSink<String> sink = correlationMap.remove(correlationId);
-        if(sink != null) {
-            sink.success(benco);
         }
         return Mono.empty();
     }
