@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 public class GlobalExceptionHandler {
 
     // Handle requests for resources that do not exist:
-    @ExceptionHandler(FormNotFoundException.class)
+    @ExceptionHandler({FormNotFoundException.class, InsufficientNoticeException.class, UnsupportedFileTypeException.class})
     public Mono<ResponseEntity<ErrorMessage>> handleNotFoundExceptions(IllegalArgumentException e) {
         ErrorMessage error = new ErrorMessage();
         error.setCode(HttpStatus.NOT_FOUND.value());

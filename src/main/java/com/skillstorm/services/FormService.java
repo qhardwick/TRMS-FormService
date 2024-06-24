@@ -1,6 +1,7 @@
 package com.skillstorm.services;
 
 import com.skillstorm.constants.EventType;
+import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.dtos.DownloadResponseDto;
 import reactor.core.publisher.Flux;
@@ -28,6 +29,9 @@ public interface FormService {
     // Get all EventTypes:
     Flux<EventType> getEventTypes();
 
+    // Get all GradeFormats:
+    Flux<GradeFormat> getGradingFormats();
+
     // Upload Event attachment to S3:
     Mono<FormDto> uploadEventAttachment(UUID id, String contentType, byte[] attachment);
 
@@ -54,4 +58,7 @@ public interface FormService {
 
     // Submit Form for Benco approval:
     Mono<FormDto> submitForBencoApproval(UUID id, String username);
+
+    // Deny Request Form:
+    Mono<FormDto> denyRequest(UUID id, String reason);
 }

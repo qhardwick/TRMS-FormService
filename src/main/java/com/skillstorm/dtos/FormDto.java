@@ -3,13 +3,14 @@ package com.skillstorm.dtos;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.skillstorm.constants.EventType;
+import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.constants.Status;
 import com.skillstorm.entities.Form;
-import com.skillstorm.entities.GradeFormat;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.UUID;
@@ -56,9 +57,10 @@ public class FormDto {
     @Min(value = 0, message = "{event.cost.must}")
     private BigDecimal cost;
 
-    // TODO: Table entity or enum?
-    //@NotNull(message = "{grade.format.must}")
-    //private GradeFormat gradeFormat;
+    @NotNull(message = "{grade.format.must}")
+    private GradeFormat gradeFormat;
+
+    private String passingGrade;
 
     @NotNull(message = "{event.type.must")
     private EventType eventType;
@@ -79,6 +81,8 @@ public class FormDto {
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Status status;
 
+    private String reasonDenied;
+
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private boolean excessFundsApproved;
 
@@ -91,7 +95,6 @@ public class FormDto {
     }
 
     public FormDto(Form form) {
-        super();
         this.id = form.getId();
         this.username = form.getUsername();
         this.firstName = form.getFirstName();
@@ -103,13 +106,15 @@ public class FormDto {
         this.location = form.getLocation();
         this.description = form.getDescription();
         this.cost = form.getCost();
-        //this.gradeFormat = form.getGradeFormat();
+        this.gradeFormat = form.getGradeFormat();
+        this.passingGrade = form.getPassingGrade();
         this.eventType = form.getEventType();
         this.justification = form.getJustification();
         this.attachment = form.getAttachment();
         this.supervisorAttachment = form.getSupervisorAttachment();
         this.departmentHeadAttachment = form.getDepartmentHeadAttachment();
         this.status = form.getStatus();
+        this.reasonDenied = form.getReasonDenied();
         this.excessFundsApproved = form.isExcessFundsApproved();
         this.reimbursement = form.getReimbursement();
     }
@@ -124,20 +129,47 @@ public class FormDto {
         form.setEmail(email);
         form.setTime(LocalTime.parse(time));
         form.setDate(LocalDate.parse(date));
-        form.setUrgent(urgent);
+        form.setUrgent(isUrgent());
         form.setLocation(location);
         form.setDescription(description);
-        form.setCost(cost);
-        //form.setGradeFormat(gradeFormat);
+        form.setCost(cost.setScale(2, RoundingMode.HALF_UP));
+        form.setGradeFormat(gradeFormat);
+        form.setPassingGrade(getPassingGrade());
         form.setEventType(eventType);
         form.setJustification(justification);
         form.setAttachment(attachment);
         form.setSupervisorAttachment(supervisorAttachment);
         form.setDepartmentHeadAttachment(departmentHeadAttachment);
         form.setStatus(status);
+        form.setReasonDenied(reasonDenied);
         form.setExcessFundsApproved(excessFundsApproved);
-        form.setReimbursement(reimbursement);
+        form.setReimbursement(getReimbursement());
 
         return form;
+    }
+
+    // If Event takes place within two weeks, the Form will be marked as Urgent:
+    public boolean isUrgent() {
+        return LocalDate.parse(date)
+                .minusDays(14)
+                .isBefore(LocalDate.now());
+    }
+
+    // If no passingGrade was supplied, use the default defined in GradeFormat:
+    public String getPassingGrade() {
+        if(passingGrade == null) {
+            return gradeFormat.getDefaultScore();
+        }
+        return passingGrade;
+    }
+
+    // Generate Reimbursement Amount based on cost and EventType but don't
+    // overwrite any adjustments made by Benco or yearly reimbursement cap:
+    public BigDecimal getReimbursement() {
+        if(reimbursement == null) {
+            return cost.multiply(BigDecimal.valueOf(eventType.getRate()))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+        return reimbursement;
     }
 }

@@ -1,7 +1,6 @@
 package com.skillstorm.constants;
 
 import lombok.Getter;
-import reactor.core.publisher.Flux;
 
 @Getter
 public enum EventType {
@@ -16,9 +15,5 @@ public enum EventType {
 
     EventType(double rate) {
         this.rate = rate;
-    }
-
-    public static Flux<EventType> getEventTypes() {
-        return Flux.fromArray(EventType.values());
     }
 }

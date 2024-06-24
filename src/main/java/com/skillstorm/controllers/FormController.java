@@ -1,8 +1,11 @@
 package com.skillstorm.controllers;
 
 import com.skillstorm.constants.EventType;
+import com.skillstorm.constants.GradeFormat;
+import com.skillstorm.dtos.DenialDto;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.services.FormService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -66,6 +69,12 @@ public class FormController {
     @GetMapping("/events")
     public Flux<EventType> getEventTypes() {
         return formService.getEventTypes();
+    }
+
+    // Get GradeFormats. Used to populate a list for the user to choose from:
+    @GetMapping("/grade-formats")
+    public Flux<GradeFormat> getGradingFormats() {
+        return formService.getGradingFormats();
     }
 
     // Upload Event attachment to S3:
@@ -135,5 +144,12 @@ public class FormController {
     @PostMapping("/{id}/submit-to-benco")
     public Mono<FormDto> submitToBenco(@PathVariable("id") UUID id, @RequestHeader("username") String departmentHead) {
         return formService.submitForBencoApproval(id, departmentHead);
+    }
+
+    // Deny the reimbursement request:
+    // TODO: 'Approver' username in header?
+    @PutMapping("/{id}/deny")
+    public Mono<FormDto> denyRequest(@PathVariable("id") UUID id, @Valid @RequestBody DenialDto denialDto) {
+        return formService.denyRequest(id, denialDto.getReason());
     }
 }
