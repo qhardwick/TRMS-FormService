@@ -1,6 +1,7 @@
 package com.skillstorm.entities;
 
 import com.skillstorm.constants.EventType;
+import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.constants.Status;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -43,8 +44,11 @@ public class Form {
 
     private BigDecimal cost;
 
-    //@Column("grade_format")
-    //private GradeFormat gradeFormat;
+    @Column("grade_format")
+    private GradeFormat gradeFormat;
+
+    @Column("passing_grade")
+    private String passingGrade;
 
     @Column("event_type")
     private EventType eventType;
@@ -60,6 +64,9 @@ public class Form {
     private String departmentHeadAttachment;
 
     private Status status;
+
+    @Column("reason_denied")
+    private String reasonDenied;
 
     @Column("excess_funds_approved")
     private boolean excessFundsApproved;

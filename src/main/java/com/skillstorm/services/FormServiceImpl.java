@@ -1,11 +1,13 @@
 package com.skillstorm.services;
 
 import com.skillstorm.constants.EventType;
+import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.constants.Queues;
 import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.dtos.MessageDto;
 import com.skillstorm.exceptions.FormNotFoundException;
+import com.skillstorm.exceptions.InsufficientNoticeException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
 import com.skillstorm.dtos.DownloadResponseDto;
@@ -22,6 +24,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,11 +45,14 @@ public class FormServiceImpl implements FormService {
         this.correlationMap = new ConcurrentHashMap<>();
     }
 
-    // Create new Form:
+    // Create new Form. Verify event start date is at least a week from today:
     @Override
     public Mono<FormDto> createForm(FormDto newForm) {
-        return formRepository.save(newForm.mapToEntity())
-                .map(FormDto::new);
+        LocalDate eventDate = LocalDate.parse(newForm.getDate());
+        return (eventDate.minusDays(7).isBefore(LocalDate.now())) ?
+                Mono.error(new InsufficientNoticeException("notice.not.sufficient")) :
+                formRepository.save(newForm.mapToEntity())
+                        .map(FormDto::new);
     }
 
     // Find Form by ID:
@@ -83,7 +89,13 @@ public class FormServiceImpl implements FormService {
     // Get all Event Types:
     @Override
     public Flux<EventType> getEventTypes() {
-        return EventType.getEventTypes();
+        return Flux.fromArray(EventType.values());
+    }
+
+    // Get all GradeFormats:
+    @Override
+    public Flux<GradeFormat> getGradingFormats() {
+        return Flux.fromArray(GradeFormat.values());
     }
 
     // Upload Event attachment to S3:
@@ -202,6 +214,18 @@ public class FormServiceImpl implements FormService {
         });
     }
 
+    // Deny Request Form:
+    @Override
+    public Mono<FormDto> denyRequest(UUID id, String reason) {
+        return findById(id).flatMap(formDto -> {
+            formDto.setStatus(Status.DENIED);
+            formDto.setReasonDenied(reason);
+            return sendMessageToInbox(id, formDto.getUsername())
+                    .then(formRepository.save(formDto.mapToEntity()))
+                    .map(FormDto::new);
+        });
+    }
+
     // Send a request to the User-Service to look up an approver based on the employee's username (direct supervisor, department head, benco):
     private Mono<String> getApprover(String username, Queues lookupQueue, Queues responseQueue) {
         return Mono.create(sink -> {
@@ -220,10 +244,10 @@ public class FormServiceImpl implements FormService {
 
     // Return approver's username to getApprover:
     @RabbitListener(queues = {"supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
-    private Mono<Void> awaitApproverResponse(@Payload String supervisor, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+    private Mono<Void> awaitApproverResponse(@Payload String approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
         MonoSink<String> sink = correlationMap.remove(correlationId);
         if(sink != null) {
-            sink.success(supervisor);
+            sink.success(approver);
         }
         return Mono.empty();
     }
