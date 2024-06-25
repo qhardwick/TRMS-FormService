@@ -61,4 +61,7 @@ public interface FormService {
 
     // Deny Request Form:
     Mono<FormDto> denyRequest(UUID id, String reason);
+
+    // Approve Request Form:
+    Mono<FormDto> approveRequest(UUID id);
 }

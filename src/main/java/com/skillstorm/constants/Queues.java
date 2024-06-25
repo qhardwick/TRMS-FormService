@@ -4,12 +4,21 @@ import lombok.Getter;
 
 @Getter
 public enum Queues {
+    // Lookup request queues:
     SUPERVISOR_LOOKUP("supervisor-lookup-queue"),
     DEPARTMENT_HEAD_LOOKUP("department-head-lookup-queue"),
     BENCO_LOOKUP("benco-lookup-queue"),
+
+    // Lookup response queues:
     SUPERVISOR_RESPONSE("supervisor-response-queue"),
     DEPARTMENT_HEAD_RESPONSE("department-head-response-queue"),
     BENCO_RESPONSE("benco-response-queue"),
+
+    // Final reimbursement queues:
+    ADJUSTMENT_REQUEST("adjustment-request-queue"),
+    ADJUSTMENT_RESPONSE("adjustment-response-queue"),
+
+    // Inbox queues:
     INBOX("queues.inbox-queue");
 
     private final String queue;

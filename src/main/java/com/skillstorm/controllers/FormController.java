@@ -129,19 +129,19 @@ public class FormController {
     }
 
     // Submit Form for Supervisor Approval:
-    @PostMapping("/{id}/submit")
+    @PutMapping("/{id}/submit")
     public Mono<FormDto> submit(@PathVariable("id") UUID id, @RequestHeader("username") String username) {
         return formService.submitForSupervisorApproval(id, username);
     }
 
     // Submit Form for Department Head approval (should only be used by Supervisor):
-    @PostMapping("/{id}/submit-to-department-head")
+    @PutMapping("/{id}/submit-to-department-head")
     public Mono<FormDto> submitToDepartmentHead(@PathVariable("id") UUID id, @RequestHeader("username") String supervisor) {
         return formService.submitForDepartmentHeadApproval(id, supervisor);
     }
 
     // Submit Form for Benco approval (should only be used by Department Head):
-    @PostMapping("/{id}/submit-to-benco")
+    @PutMapping("/{id}/submit-to-benco")
     public Mono<FormDto> submitToBenco(@PathVariable("id") UUID id, @RequestHeader("username") String departmentHead) {
         return formService.submitForBencoApproval(id, departmentHead);
     }
@@ -151,5 +151,12 @@ public class FormController {
     @PutMapping("/{id}/deny")
     public Mono<FormDto> denyRequest(@PathVariable("id") UUID id, @Valid @RequestBody DenialDto denialDto) {
         return formService.denyRequest(id, denialDto.getReason());
+    }
+
+    // Approve the reimbursement request. Benco only. Still requires passing grade / presentation to be granted:
+    // TODO: Verify that approver is a Benco either here or in service method:
+    @PutMapping("/{id}/approve")
+    public Mono<FormDto> approveRequest(@PathVariable("id") UUID id, @RequestHeader("username") String benco) {
+        return formService.approveRequest(id);
     }
 }
