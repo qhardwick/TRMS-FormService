@@ -7,7 +7,6 @@ import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.*;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.InsufficientNoticeException;
-import com.skillstorm.exceptions.QueueTimoutException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -22,7 +21,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
@@ -34,16 +32,14 @@ public class FormServiceImpl implements FormService {
     private final FormRepository formRepository;
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
-    private final Map<String, MonoSink<ApproverDto>> lookupCorrelationMap;
-    private final Map<String, MonoSink<BigDecimal>> reimbursementCorrelationMap;
+    private static final Map<String, MonoSink<ApproverDto>> lookupCorrelationMap = new ConcurrentHashMap<>();;
+    private static final Map<String, MonoSink<BigDecimal>> reimbursementCorrelationMap = new ConcurrentHashMap<>();
 
     @Autowired
     public FormServiceImpl(FormRepository formRepository, S3Service s3Service, RabbitTemplate rabbitTemplate) {
         this.formRepository = formRepository;
         this.s3Service =s3Service;
         this.rabbitTemplate = rabbitTemplate;
-        this.lookupCorrelationMap = new ConcurrentHashMap<>();
-        this.reimbursementCorrelationMap = new ConcurrentHashMap<>();
     }
 
     // Create new Form. Verify event start date is at least a week from today:
@@ -245,19 +241,19 @@ public class FormServiceImpl implements FormService {
         return Mono.create(sink -> {
             String correlationId = UUID.randomUUID().toString();
 
+            // Put the sink into the correlation map for later response handling
+            lookupCorrelationMap.put(correlationId, sink);
+
             // Set up the RabbitMQ message to send
             rabbitTemplate.convertAndSend(lookupQueue.getQueue(), username, message -> {
                 message.getMessageProperties().setCorrelationId(correlationId);
                 message.getMessageProperties().setReplyTo(responseQueue.getQueue());
                 return message;
             });
-
-            // Put the sink into the correlation map for later response handling
-            lookupCorrelationMap.put(correlationId, sink);
         });
     }
 
-    // Return approver's username to getApprover:
+    // Return approver to getApprover:
     @RabbitListener(queues = {"supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
     private Mono<Void> awaitApproverResponse(@Payload ApproverDto approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
         MonoSink<ApproverDto> sink = lookupCorrelationMap.remove(correlationId);
@@ -271,6 +267,7 @@ public class FormServiceImpl implements FormService {
     private Mono<BigDecimal> getAdjustedReimbursement(String username, BigDecimal reimbursement) {
         return Mono.create(sink -> {
             String correlationId = UUID.randomUUID().toString();
+            reimbursementCorrelationMap.put(correlationId, sink);
 
             ReimbursementMessageDto reimbursementData = new ReimbursementMessageDto(username, reimbursement);
             rabbitTemplate.convertAndSend(Queues.ADJUSTMENT_REQUEST.getQueue(), reimbursementData, message -> {
@@ -278,8 +275,6 @@ public class FormServiceImpl implements FormService {
                 message.getMessageProperties().setReplyTo(Queues.ADJUSTMENT_RESPONSE.getQueue());
                 return message;
             });
-
-            reimbursementCorrelationMap.put(correlationId, sink);
         });
     }
 
