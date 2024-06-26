@@ -32,14 +32,16 @@ public class FormServiceImpl implements FormService {
     private final FormRepository formRepository;
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
-    private static final Map<String, MonoSink<ApproverDto>> lookupCorrelationMap = new ConcurrentHashMap<>();;
-    private static final Map<String, MonoSink<BigDecimal>> reimbursementCorrelationMap = new ConcurrentHashMap<>();
+    private final Map<String, MonoSink<ApproverDto>> lookupCorrelationMap;
+    private final Map<String, MonoSink<BigDecimal>> reimbursementCorrelationMap;
 
     @Autowired
     public FormServiceImpl(FormRepository formRepository, S3Service s3Service, RabbitTemplate rabbitTemplate) {
         this.formRepository = formRepository;
         this.s3Service =s3Service;
         this.rabbitTemplate = rabbitTemplate;
+        this.lookupCorrelationMap = new ConcurrentHashMap<>();
+        this.reimbursementCorrelationMap = new ConcurrentHashMap<>();
     }
 
     // Create new Form. Verify event start date is at least a week from today:
@@ -255,7 +257,7 @@ public class FormServiceImpl implements FormService {
 
     // Return approver to getApprover:
     @RabbitListener(queues = {"supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
-    private Mono<Void> awaitApproverResponse(@Payload ApproverDto approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+    public Mono<Void> awaitApproverResponse(@Payload ApproverDto approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
         MonoSink<ApproverDto> sink = lookupCorrelationMap.remove(correlationId);
         if(sink != null) {
             sink.success(approver);
@@ -280,7 +282,7 @@ public class FormServiceImpl implements FormService {
 
     // Returns an adjusted amount to account for the fact that User's allowance may not fully cover the amount on the Form:
     @RabbitListener(queues = "adjustment-response-queue")
-    private Mono<Void> awaitAdjustmentResponse(@Payload BigDecimal adjustedReimbursement, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+    public Mono<Void> awaitAdjustmentResponse(@Payload BigDecimal adjustedReimbursement, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
         MonoSink<BigDecimal> sink = reimbursementCorrelationMap.remove(correlationId);
         if(sink != null) {
             sink.success(adjustedReimbursement);
