@@ -9,7 +9,7 @@ import reactor.core.publisher.Mono;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // Handle requests for resources that do not exist:
+    // Handle requests for resources that do not exist, attempts to submit for events less than a week away, and unsupported file types in attachments:
     @ExceptionHandler({FormNotFoundException.class, InsufficientNoticeException.class, UnsupportedFileTypeException.class})
     public Mono<ResponseEntity<ErrorMessage>> handleNotFoundExceptions(IllegalArgumentException e) {
         ErrorMessage error = new ErrorMessage();

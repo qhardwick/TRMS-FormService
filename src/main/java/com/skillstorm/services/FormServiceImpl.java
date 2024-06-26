@@ -4,15 +4,11 @@ import com.skillstorm.constants.EventType;
 import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.constants.Queues;
 import com.skillstorm.constants.Status;
-import com.skillstorm.dtos.FormDto;
-import com.skillstorm.dtos.MessageDto;
+import com.skillstorm.dtos.*;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.InsufficientNoticeException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
-import com.skillstorm.dtos.DownloadResponseDto;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -24,6 +20,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
@@ -35,14 +32,16 @@ public class FormServiceImpl implements FormService {
     private final FormRepository formRepository;
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
-    private final Map<String, MonoSink<String>> correlationMap;
+    private final Map<String, MonoSink<ApproverDto>> lookupCorrelationMap;
+    private final Map<String, MonoSink<BigDecimal>> reimbursementCorrelationMap;
 
     @Autowired
     public FormServiceImpl(FormRepository formRepository, S3Service s3Service, RabbitTemplate rabbitTemplate) {
         this.formRepository = formRepository;
         this.s3Service =s3Service;
         this.rabbitTemplate = rabbitTemplate;
-        this.correlationMap = new ConcurrentHashMap<>();
+        this.lookupCorrelationMap = new ConcurrentHashMap<>();
+        this.reimbursementCorrelationMap = new ConcurrentHashMap<>();
     }
 
     // Create new Form. Verify event start date is at least a week from today:
@@ -170,21 +169,20 @@ public class FormServiceImpl implements FormService {
     // Submit Form for Supervisor Approval:
     @Override
     public Mono<FormDto> submitForSupervisorApproval(UUID id, String username) {
-        // Pull the Form from the database and update its status to REQUESTED:
-        return findById(id).flatMap(formDto -> {
+        // Pull the Form from the database and get the user's supervisor from the User-Service:
+        return findById(id).flatMap(formDto -> getApprover(username, Queues.SUPERVISOR_LOOKUP, Queues.SUPERVISOR_RESPONSE)
+                .flatMap(supervisor -> {
+                    // If Form contains Supervisor pre-approval or if the Supervisor is also a Department Head, skip Supervisor approval step:
+                    if (formDto.getSupervisorAttachment() != null || "DEPARTMENT_HEAD".equalsIgnoreCase(supervisor.getRole())) {
+                        return submitForDepartmentHeadApproval(id, username);
+                    }
 
-            // If Form contains Supervisor preapproval attachment, move on to Department Head approval:
-            if(formDto.getSupervisorAttachment() != null) {
-                return submitForDepartmentHeadApproval(id, username);
-            }
-
-            // Otherwise, post message to Supervisor Inbox:
-            formDto.setStatus(Status.AWAITING_SUPERVISOR_APPROVAL);
-            return getApprover(username, Queues.SUPERVISOR_LOOKUP, Queues.SUPERVISOR_RESPONSE)
-                    .map(supervisor -> sendMessageToInbox(id, supervisor))
-                    .then(formRepository.save(formDto.mapToEntity()))
-                    .map(FormDto::new);
-        });
+                    // Otherwise, submit to Supervisor for approval:
+                    sendMessageToInbox(id, supervisor.getUsername());
+                    formDto.setStatus(Status.AWAITING_SUPERVISOR_APPROVAL);
+                    return formRepository.save(formDto.mapToEntity())
+                            .map(FormDto::new);
+                }));
     }
 
     // Submit Form for Department Head approval:
@@ -196,7 +194,7 @@ public class FormServiceImpl implements FormService {
             }
             formDto.setStatus(Status.AWAITING_DEPARTMENT_HEAD_APPROVAL);
             return getApprover(username, Queues.DEPARTMENT_HEAD_LOOKUP, Queues.DEPARTMENT_HEAD_RESPONSE)
-                    .map(departmentHead -> sendMessageToInbox(id, departmentHead))
+                    .map(departmentHead -> sendMessageToInbox(id, departmentHead.getUsername()))
                     .then(formRepository.save(formDto.mapToEntity()))
                     .map(FormDto::new);
         });
@@ -208,7 +206,7 @@ public class FormServiceImpl implements FormService {
         return findById(id).flatMap(formDto -> {
             formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);
             return getApprover(username, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE)
-                    .map(benco -> sendMessageToInbox(id, benco))
+                    .map(benco -> sendMessageToInbox(id, benco.getUsername()))
                     .then(formRepository.save(formDto.mapToEntity()))
                     .map(FormDto::new);
         });
@@ -226,28 +224,68 @@ public class FormServiceImpl implements FormService {
         });
     }
 
-    // Send a request to the User-Service to look up an approver based on the employee's username (direct supervisor, department head, benco):
-    private Mono<String> getApprover(String username, Queues lookupQueue, Queues responseQueue) {
-        return Mono.create(sink -> {
-            String correlationId = UUID.randomUUID().toString();
-            correlationMap.put(correlationId, sink);
-
-            Message message = MessageBuilder
-                    .withBody(username.getBytes())
-                    .setCorrelationId(correlationId)
-                    .build();
-
-            message.getMessageProperties().setReplyTo(responseQueue.getQueue());
-            rabbitTemplate.send(lookupQueue.getQueue(), message);
+    // Approve Request Form:
+    @Override
+    public Mono<FormDto> approveRequest(UUID id) {
+        return findById(id).flatMap(formDto -> {
+            formDto.setStatus(Status.PENDING);
+            return sendMessageToInbox(id, formDto.getUsername())
+                    .then(getAdjustedReimbursement(formDto.getUsername(), formDto.getReimbursement()))
+                    .flatMap(adjustedReimbursement -> {
+                        formDto.setReimbursement(adjustedReimbursement);
+                        return formRepository.save(formDto.mapToEntity());
+                    }).map(FormDto::new);
         });
     }
 
-    // Return approver's username to getApprover:
+    // Send a request to the User-Service to look up an approver based on the employee's username (direct supervisor, department head, benco):
+    private Mono<ApproverDto> getApprover(String username, Queues lookupQueue, Queues responseQueue) {
+        return Mono.create(sink -> {
+            String correlationId = UUID.randomUUID().toString();
+
+            // Put the sink into the correlation map for later response handling
+            lookupCorrelationMap.put(correlationId, sink);
+
+            // Set up the RabbitMQ message to send
+            rabbitTemplate.convertAndSend(lookupQueue.getQueue(), username, message -> {
+                message.getMessageProperties().setCorrelationId(correlationId);
+                message.getMessageProperties().setReplyTo(responseQueue.getQueue());
+                return message;
+            });
+        });
+    }
+
+    // Return approver to getApprover:
     @RabbitListener(queues = {"supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
-    private Mono<Void> awaitApproverResponse(@Payload String approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
-        MonoSink<String> sink = correlationMap.remove(correlationId);
+    public Mono<Void> awaitApproverResponse(@Payload ApproverDto approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+        MonoSink<ApproverDto> sink = lookupCorrelationMap.remove(correlationId);
         if(sink != null) {
             sink.success(approver);
+        }
+        return Mono.empty();
+    }
+
+    // Send a message to User-Service to update User's yearly allowance to reflect the value of the approved Form
+    private Mono<BigDecimal> getAdjustedReimbursement(String username, BigDecimal reimbursement) {
+        return Mono.create(sink -> {
+            String correlationId = UUID.randomUUID().toString();
+            reimbursementCorrelationMap.put(correlationId, sink);
+
+            ReimbursementMessageDto reimbursementData = new ReimbursementMessageDto(username, reimbursement);
+            rabbitTemplate.convertAndSend(Queues.ADJUSTMENT_REQUEST.getQueue(), reimbursementData, message -> {
+                message.getMessageProperties().setCorrelationId(correlationId);
+                message.getMessageProperties().setReplyTo(Queues.ADJUSTMENT_RESPONSE.getQueue());
+                return message;
+            });
+        });
+    }
+
+    // Returns an adjusted amount to account for the fact that User's allowance may not fully cover the amount on the Form:
+    @RabbitListener(queues = "adjustment-response-queue")
+    public Mono<Void> awaitAdjustmentResponse(@Payload BigDecimal adjustedReimbursement, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+        MonoSink<BigDecimal> sink = reimbursementCorrelationMap.remove(correlationId);
+        if(sink != null) {
+            sink.success(adjustedReimbursement);
         }
         return Mono.empty();
     }

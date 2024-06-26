@@ -16,6 +16,11 @@ public class RabbitMqConfig {
     @Value("${AWS_HOSTNAME:localhost}")
     private String host;
 
+    @Bean
+    public MessageConverter messageConverter() {
+        return new Jackson2JsonMessageConverter();
+    }
+
     // Exchanges:
     @Value("${exchanges.direct}")
     private String directExchange;
@@ -33,6 +38,7 @@ public class RabbitMqConfig {
     @Bean
     public RabbitTemplate rabbitTemplate() {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory());
+        rabbitTemplate.setMessageConverter(messageConverter());
         rabbitTemplate.setReplyTimeout(60000);
         return rabbitTemplate;
     }
@@ -44,6 +50,8 @@ public class RabbitMqConfig {
     }
 
     // Create the queues:
+
+    // Lookup request queues:
     @Bean
     public Queue supervisorLookupQueue() {
         return new Queue(Queues.SUPERVISOR_LOOKUP.getQueue());
@@ -59,6 +67,7 @@ public class RabbitMqConfig {
         return new Queue(Queues.BENCO_LOOKUP.getQueue());
     }
 
+    // Lookup response queues:
     @Bean
     public Queue supervisorResponseQueue() {
         return new Queue(Queues.SUPERVISOR_RESPONSE.getQueue());
@@ -74,6 +83,18 @@ public class RabbitMqConfig {
         return new Queue(Queues.BENCO_RESPONSE.getQueue());
     }
 
+    // Final reimbursement queues:
+    @Bean
+    public Queue adjustmentRequestQueue() {
+        return new Queue(Queues.ADJUSTMENT_REQUEST.getQueue());
+    }
+
+    @Bean
+    public Queue adjustmentResponseQueue() {
+        return new Queue(Queues.ADJUSTMENT_RESPONSE.getQueue());
+    }
+
+    // Inbox queues:
     @Bean
     public Queue inboxQueue() {
         return new Queue(Queues.INBOX.getQueue());
@@ -81,6 +102,8 @@ public class RabbitMqConfig {
 
 
     // Bind the queues to the exchange:
+
+    // Lookup request bindings:
     @Bean
     public Binding supervisorLookupBinding(Queue supervisorLookupQueue, Exchange directExchange) {
         return BindingBuilder.bind(supervisorLookupQueue)
@@ -105,6 +128,7 @@ public class RabbitMqConfig {
                 .noargs();
     }
 
+    // Lookup response bindings:
     @Bean
     public Binding supervisorResponseBinding(Queue supervisorResponseQueue, Exchange directExchange) {
         return BindingBuilder.bind(supervisorResponseQueue)
@@ -129,6 +153,24 @@ public class RabbitMqConfig {
                 .noargs();
     }
 
+    // Final reimbursement bindings:
+    @Bean
+    public Binding adjustmentRequestBinding(Queue adjustmentRequestQueue, Exchange directExchange) {
+        return BindingBuilder.bind(adjustmentRequestQueue)
+                .to(directExchange)
+                .with(Queues.ADJUSTMENT_REQUEST.getQueue())
+                .noargs();
+    }
+
+    @Bean
+    public Binding adjustmentResponseBinding(Queue adjustmentResponseQueue, Exchange directExchange) {
+        return BindingBuilder.bind(adjustmentResponseQueue)
+                .to(directExchange)
+                .with(Queues.ADJUSTMENT_RESPONSE.getQueue())
+                .noargs();
+    }
+
+    // Inbox bindings:
     @Bean
     public Binding inboxBindibg(Queue inboxQueue, Exchange directExchange) {
         return BindingBuilder.bind(inboxQueue)

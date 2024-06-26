@@ -12,7 +12,7 @@
 * ***As a Form, I may contain a .msg attachment from the Supervisor granting prior approval.***
 * ***As a Form, I may contain a .msg attachment from the Department Head granting prior approval.***
 * ***As a Form, I should present the projected reimbursement amount as a read-only field.***
-* As a Form, I am pending until the event has completed and the grade/presentation has been approved.
+* ***As a Form, I am pending until the event has completed and the grade/presentation has been approved.***
 * ***As a Form, I may not be submitted less than a week prior to the start of an event.***
 * ***As a Form, if my event is scheduled to begin less than two weeks from today, I must be marked urgent.***
 * ***As a Form, I must contain the passing grade needed for the event. If no grade is provided, a default value will be used.***
