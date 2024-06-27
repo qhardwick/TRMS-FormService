@@ -55,7 +55,7 @@ public class FormController {
 
     // Update Form by ID:
     @PutMapping("/{id}")
-    public Mono<FormDto> updateById(@PathVariable("id") UUID id, @RequestBody FormDto updatedForm) {
+    public Mono<FormDto> updateById(@PathVariable("id") UUID id, @Valid @RequestBody FormDto updatedForm) {
         return formService.updateById(id, updatedForm);
     }
 
@@ -162,6 +162,7 @@ public class FormController {
 
     // Awards the reimbursement to the User after satisfactory completion of the event:
     // TODO: Verify that the approver is either a Benco or a Department Head
+    // TODO: Consider recalculating reimbursement amount prior to finishing as a simpler means of handling the canceled Pending form scenario
     @PutMapping("/{id}/award-reimbursement")
     public Mono<FormDto> awardReimbursement(@PathVariable("id") UUID id, @RequestHeader("username") String approver) {
         return formService.awardReimbursement(id);
