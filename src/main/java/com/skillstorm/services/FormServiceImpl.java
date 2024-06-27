@@ -71,12 +71,21 @@ public class FormServiceImpl implements FormService {
     }
 
     // Update Form by ID:
-    // TODO: Check for existence prior to saving
     @Override
     public Mono<FormDto> updateById(UUID id, FormDto updatedForm) {
-        updatedForm.setId(id);
-        return formRepository.save(updatedForm.mapToEntity())
-                .map(FormDto::new);
+        return findById(id).flatMap(existingForm -> {
+            // Set the read-only fields that we don't want the user changing in an edit:
+            updatedForm.setId(id);
+            updatedForm.setAttachment(existingForm.getAttachment());
+            updatedForm.setSupervisorAttachment(existingForm.getSupervisorAttachment());
+            updatedForm.setDepartmentHeadAttachment(existingForm.getDepartmentHeadAttachment());
+            updatedForm.setStatus(existingForm.getStatus());
+            updatedForm.setReasonDenied(existingForm.getReasonDenied());
+            updatedForm.setExcessFundsApproved(existingForm.isExcessFundsApproved());
+            updatedForm.setReimbursement(existingForm.getReimbursement());
+            return formRepository.save(updatedForm.mapToEntity())
+                    .map(FormDto::new);
+        });
     }
 
     // Delete Form by ID:
@@ -186,7 +195,7 @@ public class FormServiceImpl implements FormService {
                 }));
     }
 
-    // Submit Form for Department Head approval:
+    // Supervisor approve request:
     @Override
     public Mono<FormDto> supervisorApprove(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
@@ -201,7 +210,7 @@ public class FormServiceImpl implements FormService {
         });
     }
 
-    // Submit Form for Benco approval:
+    // Department Head approve request:
     @Override
     public Mono<FormDto> departmentHeadApprove(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
@@ -225,7 +234,7 @@ public class FormServiceImpl implements FormService {
         });
     }
 
-    // Approve Request Form:
+    // Benco approve request:
     @Override
     public Mono<FormDto> bencoApprove(UUID id) {
         return findById(id).flatMap(formDto -> sendMessageToInbox(id, formDto.getUsername())
