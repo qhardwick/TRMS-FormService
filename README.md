@@ -38,6 +38,7 @@ To-Do List:
 * Utilize the response messages defined in the SystemMessages.properties file
 * Pull the user's username from the request header and possibly use it to fill out the parts of the form that relate to the user and not to the event itself
 * Inbox Service is yet to be defined and will likely need to refactor communication between it and the Form Service
+* Either consolidate the cancel request and delete form methods into a single method or restrict the delete method to a user with elevated privileges
 
 ## Getting Started
 1. Using your CLI tool, `cd` into the directory you want to store the project in.
@@ -144,6 +145,7 @@ datastax-java-driver {
    cloud-hosted database, so you can still host the program locally but will need to run the Discovery Service, Gateway Service, User Service, Form Service, and Inbox Service simultaneously for full functionality.
 3. Assuming you are hosting locally and sending requests through the Gateway Service, it functions as follows:
 
+
 ### Creating a new Reimbursement Request Form:
 1. `POST` to `http://localhost:8125/forms`
 2. With the request body:
@@ -221,32 +223,173 @@ datastax-java-driver {
 }
 ```
 
+
 ### Adding an Event-Related Attachment:
 1. After the Request Form has been created, you may optionally add an event-related attachment prior to submitting it.
 2. To do this, use the `id` returned in the response after creating the form and then `POST` to  `http://localhost:8125/forms/{id}/attachment` with a Body
   that is a file with extension: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.txt`, or `.docx` along with a Header that includes the relevant `Content-Type`.
+
 
 ### Adding a Supervisor Pre-Approval Attachment:
 1. After the Request Form has been created, you may optionally add a supervisor pre-approval attachment prior to submitting it to skip the supervisor approval step:
 2. To do this, use the `id` returned in the response after creating the form and then `POST` to  `http://localhost:8125/forms/{id}/supervisor-attachment` with a Body
   that is a file with a `.msg` extension along with a Header that includes the relevant `Content-Type`.
 
+
 ### Adding a Department Head Pre-Approval Attachment:
 1. After the Request Form has been created, you may optionally add a Department Head pre-approval attachment prior to submitting it to skip the Department Head approval step:
 2. To do this, use the `id` returned in the response after creating the form and then `POST` to  `http://localhost:8125/forms/{id}/department-head-attachment` with a Body
   that is a file with a `.msg` extension along with a Header that includes the relevant `Content-Type`.
 
+
 ### Viewing the Event-Related Attachment:
 1. After it has been uploaded, you may view the Event-Related Attachment associated with a Request Form by sending a `GET` request to the same URL that was used to upload it:
 2. `GET http://localhost:8125/forms/{id}/attachment`
+
 
 3. ### Viewing the Supervisor Pre-Approval Attachment:
 1. After it has been uploaded, you may view the Supervisor Pre-Approval Attachment associated with a Request Form by sending a `GET` request to the same URL that was used to upload it:
 2. `GET http://localhost:8125/forms/{id}/supervisor-attachment`
 
+
 3. ### Viewing the Department Head Pre-Approval Attachment:
 1. After it has been uploaded, you may view the Department Head Pre-Approval Attachment associated with a Request Form by sending a `GET` request to the same URL that was used to upload it:
 2. `GET http://localhost:8125/forms/{id}/department-head-attachment`
+
+
+### Viewing a Request Form:
+1. You can view and retrieve a request form using its `id` by sending a `GET` request to `http://localhost:8125/forms/{id}`
+
+
+### Editing a Request Form:
+1. You can edit a request form using its `id` by sending a `PUT` request to `http://localhost:8125/forms/{id}` with the request body:
+```
+{
+    "username": "[String]",
+    "firstName": "[String]",
+    "lastName": "[String]",
+    "email": "[String]",
+    "time": "[HH:mm]",
+    "date": "[YYYY-MM-DD]",
+    "location": "[String]",
+    "description": "[String]",
+    "cost": [Double],
+    "gradeFormat": "[String]",
+    "passingGrade": "[String]",
+    "eventType": "[String]",
+    "justification": "[String]",
+    "hoursMissed": [Integer]
+}
+```
+2. Note: Every field listed in the body above will be overwritten by this edit method, whether you include them in the body or not. Optional excluded fields will be set to null. Mandatory
+   excluded fields will cause a validation error. Any field not listed in the body above will be inherited by the Request Form as it already exists in the database.
+
+
+### Deleting a Request Form:
+1. You can delete a request form using its `id` be sending a `DELETE` request to `http://localhost:8125/forms/{id}`
+
+
+### Submitting a Request Form:
+1. After it has been created, you may submit a reimbursement form for approval using its `id` by sending a `PUT` request to `http://localhost:8125/forms/{id}/submit`. The requesting user's `username` must
+   be included in the request header as a field with the key: `username`
+2. If the form did not contain a Supervisor Pre-Approval attachment and if the user's supervisor is not a Department Head, a message will be sent to the supervisor's Inbox for approval and the
+   response body should show the request form has a status of `AWAITING_SUPERVISOR_APPROVAL`:
+```
+{
+  ...
+  "status": "AWAITING_SUPERVISOR_APPROVAL",
+  ...
+}
+```
+3. If the form did contain a Supervisor Pre-Approval attachment but not a Department Head Pre-approval, or if it contained no Pre-Approval attachments but the supervisor is also a Department Head, the
+   supervisor approval step is skipped and a message will instead be sent to the Department Head for approval and the response body should show the request form has a status of `AWAITING_DEPARTMENT_HEAD_APPROVAL`:
+```
+{
+  ...
+  "status": "AWAITING_DEPARTMENT_HEAD_APPROVAL",
+  ...
+}
+```
+4. If the form contained both a Supervisor Pre-Approval attachment and a Department Head Pre-approval attachment, of if the user's supervisor is also a Department Head and the form contained
+   a Department Head Pre-approval attachment, then both approval steps are skipped and a message will be sent to a Benefits Coordinator (Benco) and the request body will show the form with a status of
+   `AWAITING_BENCO_APPROVAL`:
+```
+{
+  ...
+  "status": "AWAITING_BENCO_APPROVAL",
+  ...
+}
+```
+5. There are no Benco pre-approval conditions. The Benco approval must always be initiated manually.
+
+
+### Approving a Request Form as a Supervisor:
+1. If you are a user's direct supervisor, you may approve requests submitted to you by using the form's `id` and sending a `PUT` request to `http://localhost:8125/forms/{id}/supervisor-approve`. The approving
+   supervisor's `username` must be included in the request header under the `username` key.
+2. If the form did not contain a Department Head Pre-Approval attachment, a message will sent to the Department Head for further approval and the response body should show that the form's status has been updated
+   to `AWAITING_DEPARTMENT_HEAD_APPROVAL`:
+```
+{
+  ...
+  "status": "AWAITING_DEPARTMENT_HEAD_APPROVAL",
+  ...
+}
+```
+3. If the form did contain a Department Head Pre-Approval attachment, the Department Head approval step is skipped and a message will instead be sent to the Benefits Coordinator for further approval and the
+   response body should show that the form's status has been updated to `AWAITING_BENCO_APPROVAL`:
+```
+{
+  ...
+  "status": "AWAITING_BENCO_APPROVAL",
+  ...
+}
+```
+
+
+### Approving a Request Form as a Department Head:
+1. If you are a Department Head, you may approve requests submitted to you by using the form's `id` and sending a `PUT` request to `http://localhost:8125/forms/{id}/department-head-approve`. The approving
+   department head's `username` must be included in the request header under the `username` key.
+2. A message will sent to the Benefits Coordinator for further approval and the response body should show that the form's status has been updated to `AWAITING_BENCO_APPROVAL`:
+```
+{
+  ...
+  "status": "AWAITING_BENCO_APPROVAL",
+  ...
+}
+```
+
+
+### Approving a Request Form as a Benefits Coordinator:
+1. If you are a Benefits Coordinator, you may approve requests submitted to you by using the form's `id` and sending a `PUT` request to `http://localhost:8125/forms/{id}/benco-approve`. The approving
+   benco's `username` must be included in the request header under the `username` key.
+2. A message will sent to the requesting user notifying them of approval and the response body should show that the form's status has been updated to `PENDING`:
+```
+{
+  ...
+  "status": "PENDING",
+  ...
+}
+```
+
+
+### Denying a Request Form:
+1. Any user that is a part of the approver hierarchy can deny the request form once it is awaiting their approval. They can do this using the form's `id` by sending a `PUT` request to
+   `http://localhost:8125/forms/{id}/deny` but they must also supply a reason for the denial in the request body:
+```
+{
+  "reason": "[String]"
+}
+```
+2. A message will be sent to the requesting user notifying them of the request denial and the response body wuill show that the form has been updated to contain the `reasonDenied` and its status will be
+   updated to `DENIED`:
+```
+{
+  ...
+  "status": "DENIED",
+  "reasonDenied": "[String]",
+  ...
+}
+```
 
 
 ## Contributors
