@@ -362,11 +362,14 @@ datastax-java-driver {
 ### Approving a Request Form as a Benefits Coordinator:
 1. If you are a Benefits Coordinator, you may approve requests submitted to you by using the form's `id` and sending a `PUT` request to `http://localhost:8125/forms/{id}/benco-approve`. The approving
    benco's `username` must be included in the request header under the `username` key.
-2. A message will sent to the requesting user notifying them of approval and the response body should show that the form's status has been updated to `PENDING`:
+2. A message will sent to the requesting user notifying them of approval and the response body should show that the form's status has been updated to `PENDING`. Depending on the form's projected
+   `reimbursement` amount derived from the `cost` of the event and the rate as defined by the `eventType`, the `reimbursement` amount may be adjusted if the original projected amount exceeds the
+   user's `remainingBalance` for the year: 
 ```
 {
   ...
   "status": "PENDING",
+  "reimbursement": [Double],
   ...
 }
 ```
@@ -380,7 +383,7 @@ datastax-java-driver {
   "reason": "[String]"
 }
 ```
-2. A message will be sent to the requesting user notifying them of the request denial and the response body wuill show that the form has been updated to contain the `reasonDenied` and its status will be
+2. A message will be sent to the requesting user notifying them of the request denial and the response body will show that the form has been updated to contain the `reasonDenied` and its status will be
    updated to `DENIED`:
 ```
 {
@@ -391,6 +394,27 @@ datastax-java-driver {
 }
 ```
 
+
+### Awarding a Reimbursement:
+1. After the request has been approved, the user will need to show satisfactory completion of the event after the event has concluded. This can be in the form of a presentation delivered to the Department Head
+   or demonstrating a passing grade to the Benefits Coordinator. Which one of these is true depends on the `gradeFormat` for the event listed on the request form.
+2. The applicable Department Head or Benco can award the reimbursement by using the form's `id` and sending a `PUT` request to `http://localhost:8125/forms/{id}/award-reimbursement` and including the approver's
+   `username` in the request header under the `username` field.
+3. A message will sent to the requesting user notifying them of the award and the response body should show that the form's status has been updated to `APPROVED`:
+```
+{
+  ...
+  "status": "APPROVED",
+  ...
+}
+```
+
+
+### Canceling a Reimbursement Request:
+1. So long as the request has not yet been awarded, the requesting user may opt to cancel a reimbursement request by using the form's `id` and sending a `DELETE` request to
+   `http://localhost:8125/forms/{id}/cancel`
+2. If the request form has a status of `PENDING`, the user's `remainingBalance` for the year will be adjusted to reflect the fact that they are no longer making the request. A form that has not yet reached the
+   `PENDING` status will result in no change to their `remainingBalance` as their balance was not yet affected by the request to begin with. Any successful cancellation will also remove the request from the database.
 
 ## Contributors
 * Quentin Hardwick
