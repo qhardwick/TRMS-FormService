@@ -53,7 +53,7 @@ To-Do List:
 4. Create a Keyspace with the name: `trms` or choose one of your own by modifying the `CassandraConfig.java` file:
 ```
 @Configuration
-@EnableReactiveCassandraRepositories(basePackages = {"com.skillstorm.repositores"})
+@EnableReactiveCassandraRepositories(basePackages = {"com.skillstorm.repositories"})
 public class CassandraConfig {
 
     @Bean
@@ -75,7 +75,7 @@ public class CassandraConfig {
    file in the `configs` package:
 ```
 @Configuration
-@EnableReactiveCassandraRepositories(basePackages = {"com.skillstorm.repositores"})
+@EnableReactiveCassandraRepositories(basePackages = {"com.skillstorm.repositories"})
 public class CassandraConfig {
 
     ...
