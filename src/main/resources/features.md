@@ -4,10 +4,11 @@
 * ***As a Form, I can be deleted.***
 * ***As a Form, I can be read.***
 * ***As a Form, I can be submitted.***
-* As a Form, I can be approved.
+* ***As a Form, I can be cancelled so long as I have not yet been approved.***
+* ***As a Form, I can be approved.***
 * ***As a Form, I can be denied.***
 * ***As a Form, I must collect: employee info, date, time, location, description, cost, type, and grading format the event, as well as a work-related justification.***
-* As a Form, I may optionally include the amount of work time that will be missed (if any).
+* ***As a Form, I may optionally include the amount of work time that will be missed (if any).***
 * ***As a Form, I may optionally include an event-related attachment (.pdf, .png, .jpeg, .txt, or .doc).***
 * ***As a Form, I may contain a .msg attachment from the Supervisor granting prior approval.***
 * ***As a Form, I may contain a .msg attachment from the Department Head granting prior approval.***

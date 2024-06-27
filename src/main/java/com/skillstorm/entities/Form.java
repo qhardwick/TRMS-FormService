@@ -55,6 +55,9 @@ public class Form {
 
     private String justification;
 
+    @Column("hours_missed")
+    private int hoursMissed;
+
     private String attachment;
 
     @Column("supervisor_preapproval")

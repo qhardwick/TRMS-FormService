@@ -7,6 +7,7 @@ import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.*;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.InsufficientNoticeException;
+import com.skillstorm.exceptions.RequestAlreadyAwardedException;
 import com.skillstorm.exceptions.UnsupportedFileTypeException;
 import com.skillstorm.repositories.FormRepository;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -33,7 +34,7 @@ public class FormServiceImpl implements FormService {
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
     private final Map<String, MonoSink<ApproverDto>> lookupCorrelationMap;
-    private final Map<String, MonoSink<BigDecimal>> reimbursementCorrelationMap;
+    private final Map<String, MonoSink<ReimbursementMessageDto>> reimbursementCorrelationMap;
 
     @Autowired
     public FormServiceImpl(FormRepository formRepository, S3Service s3Service, RabbitTemplate rabbitTemplate) {
@@ -168,13 +169,13 @@ public class FormServiceImpl implements FormService {
 
     // Submit Form for Supervisor Approval:
     @Override
-    public Mono<FormDto> submitForSupervisorApproval(UUID id, String username) {
+    public Mono<FormDto> submitForApproval(UUID id, String username) {
         // Pull the Form from the database and get the user's supervisor from the User-Service:
         return findById(id).flatMap(formDto -> getApprover(username, Queues.SUPERVISOR_LOOKUP, Queues.SUPERVISOR_RESPONSE)
                 .flatMap(supervisor -> {
                     // If Form contains Supervisor pre-approval or if the Supervisor is also a Department Head, skip Supervisor approval step:
                     if (formDto.getSupervisorAttachment() != null || "DEPARTMENT_HEAD".equalsIgnoreCase(supervisor.getRole())) {
-                        return submitForDepartmentHeadApproval(id, username);
+                        return supervisorApprove(id, username);
                     }
 
                     // Otherwise, submit to Supervisor for approval:
@@ -187,10 +188,10 @@ public class FormServiceImpl implements FormService {
 
     // Submit Form for Department Head approval:
     @Override
-    public Mono<FormDto> submitForDepartmentHeadApproval(UUID id, String username) {
+    public Mono<FormDto> supervisorApprove(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
             if(formDto.getDepartmentHeadAttachment() != null) {
-                return submitForBencoApproval(id, username);
+                return departmentHeadApprove(id, username);
             }
             formDto.setStatus(Status.AWAITING_DEPARTMENT_HEAD_APPROVAL);
             return getApprover(username, Queues.DEPARTMENT_HEAD_LOOKUP, Queues.DEPARTMENT_HEAD_RESPONSE)
@@ -202,7 +203,7 @@ public class FormServiceImpl implements FormService {
 
     // Submit Form for Benco approval:
     @Override
-    public Mono<FormDto> submitForBencoApproval(UUID id, String username) {
+    public Mono<FormDto> departmentHeadApprove(UUID id, String username) {
         return findById(id).flatMap(formDto -> {
             formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);
             return getApprover(username, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE)
@@ -226,16 +227,49 @@ public class FormServiceImpl implements FormService {
 
     // Approve Request Form:
     @Override
-    public Mono<FormDto> approveRequest(UUID id) {
+    public Mono<FormDto> bencoApprove(UUID id) {
+        return findById(id).flatMap(formDto -> sendMessageToInbox(id, formDto.getUsername())
+                .then(getAdjustedReimbursement(formDto.getUsername(), formDto.getReimbursement()))
+                .flatMap(adjustedReimbursement -> {
+                    formDto.setStatus(Status.PENDING);
+                    formDto.setReimbursement(adjustedReimbursement.getReimbursement());
+                    return formRepository.save(formDto.mapToEntity());
+                }).map(FormDto::new));
+    }
+
+    // Awards the reimbursement after satisfactory completion of event:
+    @Override
+    public Mono<FormDto> awardReimbursement(UUID id) {
         return findById(id).flatMap(formDto -> {
-            formDto.setStatus(Status.PENDING);
+            formDto.setStatus(Status.APPROVED);
             return sendMessageToInbox(id, formDto.getUsername())
-                    .then(getAdjustedReimbursement(formDto.getUsername(), formDto.getReimbursement()))
-                    .flatMap(adjustedReimbursement -> {
-                        formDto.setReimbursement(adjustedReimbursement);
-                        return formRepository.save(formDto.mapToEntity());
-                    }).map(FormDto::new);
+                    .then(formRepository.save(formDto.mapToEntity()))
+                    .map(FormDto::new);
         });
+    }
+
+    // Cancel a Reimbursement Request:
+    @Override
+    public Mono<Void> cancelRequest(UUID id) {
+        return findById(id).flatMap(form -> {
+            // If it has already been approved, it cannot be canceled. May also decide to disable ability to cancel requests that have been explicitly denied for record keeping purposes:
+            if("APPROVED".equalsIgnoreCase(form.getStatus().name())) {
+                return Mono.error(new RequestAlreadyAwardedException("request.already.awarded"));
+            }
+            // If it is not Pending then no adjustments to User's allowance are necessary, so we can just delete the entry:
+            if(!"PENDING".equalsIgnoreCase(form.getStatus().name())) {
+                return formRepository.deleteById(id);
+            }
+            // Otherwise, we need to return the pending amount to the User's allowance. May also need to find all currently Pending forms for the User and re-run them to utilize the newly available funds:
+            ReimbursementMessageDto reimbursementMessage = new ReimbursementMessageDto(form.getUsername(), form.getReimbursement());
+            return sendCancellationMessage(reimbursementMessage)
+                    .then(formRepository.deleteById(id));
+        });
+    }
+
+    // Send message to User-Service to restore balance from Pending form being cancelled by the User:
+    private Mono<Void> sendCancellationMessage(ReimbursementMessageDto reimbursementMessage) {
+        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.CANCEL_REQUEST.getQueue(), reimbursementMessage));
     }
 
     // Send a request to the User-Service to look up an approver based on the employee's username (direct supervisor, department head, benco):
@@ -266,7 +300,7 @@ public class FormServiceImpl implements FormService {
     }
 
     // Send a message to User-Service to update User's yearly allowance to reflect the value of the approved Form
-    private Mono<BigDecimal> getAdjustedReimbursement(String username, BigDecimal reimbursement) {
+    private Mono<ReimbursementMessageDto> getAdjustedReimbursement(String username, BigDecimal reimbursement) {
         return Mono.create(sink -> {
             String correlationId = UUID.randomUUID().toString();
             reimbursementCorrelationMap.put(correlationId, sink);
@@ -282,8 +316,8 @@ public class FormServiceImpl implements FormService {
 
     // Returns an adjusted amount to account for the fact that User's allowance may not fully cover the amount on the Form:
     @RabbitListener(queues = "adjustment-response-queue")
-    public Mono<Void> awaitAdjustmentResponse(@Payload BigDecimal adjustedReimbursement, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
-        MonoSink<BigDecimal> sink = reimbursementCorrelationMap.remove(correlationId);
+    public Mono<Void> awaitAdjustmentResponse(@Payload ReimbursementMessageDto adjustedReimbursement, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+        MonoSink<ReimbursementMessageDto> sink = reimbursementCorrelationMap.remove(correlationId);
         if(sink != null) {
             sink.success(adjustedReimbursement);
         }
