@@ -17,6 +17,7 @@ public enum Queues {
     // Final reimbursement queues:
     ADJUSTMENT_REQUEST("adjustment-request-queue"),
     ADJUSTMENT_RESPONSE("adjustment-response-queue"),
+    CANCEL_REQUEST("cancel-request-queue"),
 
     // Inbox queues:
     INBOX("queues.inbox-queue");

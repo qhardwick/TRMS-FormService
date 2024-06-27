@@ -69,6 +69,9 @@ public class FormDto {
     @Size(min = 5, max = 100, message = "{event.justification.must}")
     private String justification;
 
+    @Min(value = 0, message = "{hours.missed.positive}")
+    private int hoursMissed;
+
     @Pattern(regexp = "^\\S+\\.(pdf|png|jpe?g|txt|doc)$", message = "{attachment.invalid}")
     private String attachment;
 
@@ -110,6 +113,7 @@ public class FormDto {
         this.passingGrade = form.getPassingGrade();
         this.eventType = form.getEventType();
         this.justification = form.getJustification();
+        this.hoursMissed = form.getHoursMissed();
         this.attachment = form.getAttachment();
         this.supervisorAttachment = form.getSupervisorAttachment();
         this.departmentHeadAttachment = form.getDepartmentHeadAttachment();
@@ -137,6 +141,7 @@ public class FormDto {
         form.setPassingGrade(getPassingGrade());
         form.setEventType(eventType);
         form.setJustification(justification);
+        form.setHoursMissed(hoursMissed);
         form.setAttachment(attachment);
         form.setSupervisorAttachment(supervisorAttachment);
         form.setDepartmentHeadAttachment(departmentHeadAttachment);

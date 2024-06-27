@@ -94,6 +94,11 @@ public class RabbitMqConfig {
         return new Queue(Queues.ADJUSTMENT_RESPONSE.getQueue());
     }
 
+    @Bean
+    public Queue cancelRequestQueue() {
+        return new Queue(Queues.CANCEL_REQUEST.getQueue());
+    }
+
     // Inbox queues:
     @Bean
     public Queue inboxQueue() {
@@ -167,6 +172,14 @@ public class RabbitMqConfig {
         return BindingBuilder.bind(adjustmentResponseQueue)
                 .to(directExchange)
                 .with(Queues.ADJUSTMENT_RESPONSE.getQueue())
+                .noargs();
+    }
+
+    @Bean
+    public Binding cancelRequestBinding(Queue cancelRequestQueue, Exchange directExchange) {
+        return BindingBuilder.bind(cancelRequestQueue)
+                .to(directExchange)
+                .with(Queues.CANCEL_REQUEST.getQueue())
                 .noargs();
     }
 

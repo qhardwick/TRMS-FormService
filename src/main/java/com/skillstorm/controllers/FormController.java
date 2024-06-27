@@ -128,22 +128,22 @@ public class FormController {
         });
     }
 
-    // Submit Form for Supervisor Approval:
+    // Submit Form for Approval:
     @PutMapping("/{id}/submit")
     public Mono<FormDto> submit(@PathVariable("id") UUID id, @RequestHeader("username") String username) {
-        return formService.submitForSupervisorApproval(id, username);
+        return formService.submitForApproval(id, username);
     }
 
-    // Submit Form for Department Head approval (should only be used by Supervisor):
-    @PutMapping("/{id}/submit-to-department-head")
+    // Supervisor approve request:
+    @PutMapping("/{id}/supervisor-approve")
     public Mono<FormDto> submitToDepartmentHead(@PathVariable("id") UUID id, @RequestHeader("username") String supervisor) {
-        return formService.submitForDepartmentHeadApproval(id, supervisor);
+        return formService.supervisorApprove(id, supervisor);
     }
 
-    // Submit Form for Benco approval (should only be used by Department Head):
-    @PutMapping("/{id}/submit-to-benco")
+    // Department Head approve request:
+    @PutMapping("/{id}/department-head-approve")
     public Mono<FormDto> submitToBenco(@PathVariable("id") UUID id, @RequestHeader("username") String departmentHead) {
-        return formService.submitForBencoApproval(id, departmentHead);
+        return formService.departmentHeadApprove(id, departmentHead);
     }
 
     // Deny the reimbursement request:
@@ -153,10 +153,24 @@ public class FormController {
         return formService.denyRequest(id, denialDto.getReason());
     }
 
-    // Approve the reimbursement request. Benco only. Still requires passing grade / presentation to be granted:
+    // Benco approve request. Still pending and requires passing grade / presentation to be granted:
     // TODO: Verify that approver is a Benco either here or in service method:
-    @PutMapping("/{id}/approve")
+    @PutMapping("/{id}/benco-approve")
     public Mono<FormDto> approveRequest(@PathVariable("id") UUID id, @RequestHeader("username") String benco) {
-        return formService.approveRequest(id);
+        return formService.bencoApprove(id);
+    }
+
+    // Awards the reimbursement to the User after satisfactory completion of the event:
+    // TODO: Verify that the approver is either a Benco or a Department Head
+    @PutMapping("/{id}/award-reimbursement")
+    public Mono<FormDto> awardReimbursement(@PathVariable("id") UUID id, @RequestHeader("username") String approver) {
+        return formService.awardReimbursement(id);
+    }
+
+    // Cancel a Reimbursement request. Only if has not yet been awarded:
+    //TODO: If Form was Pending, Recalculate other Pending forms to utilize any freed Reimbursement allowance?
+    @DeleteMapping("/{id}/cancel")
+    public Mono<Void> cancelRequest(@PathVariable("id") UUID id) {
+        return formService.cancelRequest(id);
     }
 }
