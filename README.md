@@ -349,7 +349,7 @@ datastax-java-driver {
 ### Approving a Request Form as a Department Head:
 1. If you are a Department Head, you may approve requests submitted to you by using the form's `id` and sending a `PUT` request to `http://localhost:8125/forms/{id}/department-head-approve`. The approving
    department head's `username` must be included in the request header under the `username` key.
-2. A message will sent to the Benefits Coordinator for further approval and the response body should show that the form's status has been updated to `AWAITING_BENCO_APPROVAL`:
+2. A message will be sent to the Benefits Coordinator for further approval and the response body should show that the form's status has been updated to `AWAITING_BENCO_APPROVAL`:
 ```
 {
   ...
