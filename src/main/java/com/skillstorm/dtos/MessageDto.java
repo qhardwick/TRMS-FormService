@@ -12,6 +12,6 @@ import java.util.UUID;
 @AllArgsConstructor
 public class MessageDto implements Serializable {
 
-    private UUID id;
+    private UUID formId;
     private String username;
 }
