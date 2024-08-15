@@ -20,7 +20,7 @@ public enum Queues {
     CANCEL_REQUEST("cancel-request-queue"),
 
     // Inbox queues:
-    INBOX("queues.inbox-queue");
+    INBOX("inbox-queue");
 
     private final String queue;
 

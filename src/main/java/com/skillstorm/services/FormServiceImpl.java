@@ -351,8 +351,9 @@ public class FormServiceImpl implements FormService {
     }
 
     // Send a message to a User's Inbox:
-    private Mono<Void> sendMessageToInbox(UUID id, String username) {
-        MessageDto message = new MessageDto(id, username);
+    private Mono<Void> sendMessageToInbox(UUID formId, String username) {
+        MessageDto message = new MessageDto(formId, username);
+        System.out.println("\n\nSending message to user: " + username + "\n\n");
         return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.INBOX.getQueue(), message));
     }
 
