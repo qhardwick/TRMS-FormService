@@ -2,6 +2,7 @@ package com.skillstorm.controllers;
 
 import com.skillstorm.constants.EventType;
 import com.skillstorm.constants.GradeFormat;
+import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.DenialDto;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.services.FormService;
@@ -53,6 +54,12 @@ public class FormController {
         return formService.findAll();
     }
 
+    // View all of a User's Forms. Optionally filter by status:
+    @GetMapping("/active")
+    public Flux<FormDto> findAllFormsByUsernameAndStatus(@RequestParam(value = "status", required = false) String status, @RequestHeader("username") String username) {
+        return formService.findAllFormsByUsernameAndStatus(username, status);
+    }
+
     // Update Form by ID:
     @PutMapping("/{id}")
     public Mono<FormDto> updateById(@PathVariable("id") UUID id, @Valid @RequestBody FormDto updatedForm) {
@@ -75,6 +82,12 @@ public class FormController {
     @GetMapping("/grade-formats")
     public Flux<GradeFormat> getGradingFormats() {
         return formService.getGradingFormats();
+    }
+
+    // Get Status types. Used to populate a list for the User to use as a filter:
+    @GetMapping("statuses")
+    public Flux<Status> getAllStatuses() {
+        return formService.getAllStatuses();
     }
 
     // Upload Event attachment to S3:

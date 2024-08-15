@@ -2,6 +2,7 @@ package com.skillstorm.services;
 
 import com.skillstorm.constants.EventType;
 import com.skillstorm.constants.GradeFormat;
+import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.FormDto;
 import com.skillstorm.dtos.DownloadResponseDto;
 import reactor.core.publisher.Flux;
@@ -20,6 +21,9 @@ public interface FormService {
     // Find all Forms:
     Flux<FormDto> findAll();
 
+    // Find all active forms for a given User. Filter by Status:
+    Flux<FormDto> findAllFormsByUsernameAndStatus(String username, String status);
+
     // Update Form by ID:
     Mono<FormDto> updateById(UUID id, FormDto updatedForm);
 
@@ -31,6 +35,9 @@ public interface FormService {
 
     // Get all GradeFormats:
     Flux<GradeFormat> getGradingFormats();
+
+    // Get all Statuses:
+    Flux<Status> getAllStatuses();
 
     // Upload Event attachment to S3:
     Mono<FormDto> uploadEventAttachment(UUID id, String contentType, byte[] attachment);
