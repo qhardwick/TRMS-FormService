@@ -70,6 +70,17 @@ public class FormServiceImpl implements FormService {
                 .map(FormDto::new);
     }
 
+    // Find all active forms for a given User. Filter by Status:
+    // TODO: Consider denormalizing data into a separate table to query forms by username. For now we'll just include username as
+    // TODO: a Clustering Key so that at least we're searching across partitions using sorted data. Will filter by status using Java since
+    // TODO: result set will always be small
+    @Override
+    public Flux<FormDto> findAllFormsByUsernameAndStatus(String username, String status) {
+        return formRepository.findAllFormsByUsername(username)
+                .filter(form -> status == null || status.equalsIgnoreCase(form.getStatus().toString()))
+                .map(FormDto::new);
+    }
+
     // Update Form by ID:
     @Override
     public Mono<FormDto> updateById(UUID id, FormDto updatedForm) {
@@ -105,6 +116,12 @@ public class FormServiceImpl implements FormService {
     @Override
     public Flux<GradeFormat> getGradingFormats() {
         return Flux.fromArray(GradeFormat.values());
+    }
+
+    // Get all Statuses:
+    @Override
+    public Flux<Status> getAllStatuses() {
+        return Flux.fromArray(Status.values());
     }
 
     // Upload Event attachment to S3:
