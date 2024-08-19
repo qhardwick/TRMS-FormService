@@ -10,7 +10,7 @@
     </parent>
 
     <groupId>com.skillstorm</groupId>
-    <artifactId>UserService</artifactId>
+    <artifactId>FormService</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>FormService</name>
     <description>Handles form data for Tuition Reimbursement Management System</description>

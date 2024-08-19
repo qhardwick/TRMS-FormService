@@ -205,10 +205,10 @@ public class FormServiceImpl implements FormService {
                     }
 
                     // Otherwise, submit to Supervisor for approval:
-                    sendMessageToInbox(id, supervisor.getUsername());
                     formDto.setStatus(Status.AWAITING_SUPERVISOR_APPROVAL);
-                    return formRepository.save(formDto.mapToEntity())
-                            .map(FormDto::new);
+                    return sendMessageToInbox(id, supervisor.getUsername())
+                            .then(formRepository.save(formDto.mapToEntity())
+                                    .map(FormDto::new));
                 }));
     }
 
@@ -293,7 +293,8 @@ public class FormServiceImpl implements FormService {
         });
     }
 
-    // Send message to User-Service to restore balance from Pending form being cancelled by the User:
+    // Send message to User-Service to restore balance from Pending form being cancelled by the User. If status is other than Pending no cross-service communication
+    //  is needed to cancel a request:
     private Mono<Void> sendCancellationMessage(ReimbursementMessageDto reimbursementMessage) {
         return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.CANCEL_REQUEST.getQueue(), reimbursementMessage));
     }
