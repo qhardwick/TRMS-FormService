@@ -149,13 +149,13 @@ public class FormController {
 
     // Supervisor approve request:
     @PutMapping("/{id}/supervisor-approve")
-    public Mono<FormDto> submitToDepartmentHead(@PathVariable("id") UUID id, @RequestHeader("username") String supervisor) {
+    public Mono<FormDto> supervisorApproval(@PathVariable("id") UUID id, @RequestHeader("username") String supervisor) {
         return formService.supervisorApprove(id, supervisor);
     }
 
     // Department Head approve request:
     @PutMapping("/{id}/department-head-approve")
-    public Mono<FormDto> submitToBenco(@PathVariable("id") UUID id, @RequestHeader("username") String departmentHead) {
+    public Mono<FormDto> departmentHeadApproval(@PathVariable("id") UUID id, @RequestHeader("username") String departmentHead) {
         return formService.departmentHeadApprove(id, departmentHead);
     }
 
@@ -169,9 +169,12 @@ public class FormController {
     // Benco approve request. Still pending and requires passing grade / presentation to be granted:
     // TODO: Verify that approver is a Benco either here or in service method:
     @PutMapping("/{id}/benco-approve")
-    public Mono<FormDto> approveRequest(@PathVariable("id") UUID id, @RequestHeader("username") String benco) {
+    public Mono<FormDto> bencoApproval(@PathVariable("id") UUID id, @RequestHeader("username") String benco) {
         return formService.bencoApprove(id);
     }
+
+    // User uploads completion attachment after event, proving satisfactory performance:
+
 
     // Awards the reimbursement to the User after satisfactory completion of the event:
     // TODO: Verify that the approver is either a Benco or a Department Head

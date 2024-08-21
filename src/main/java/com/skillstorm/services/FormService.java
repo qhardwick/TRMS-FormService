@@ -60,16 +60,16 @@ public interface FormService {
     // Submit Form for Supervisor Approval:
     Mono<FormDto> submitForApproval(UUID id, String username);
 
-    // Submit Form for Department Head approval:
-    Mono<FormDto> supervisorApprove(UUID id, String username);
+    // Supervisor approves request:
+    Mono<FormDto> supervisorApprove(UUID id, String supervisor);
 
-    // Submit Form for Benco approval:
-    Mono<FormDto> departmentHeadApprove(UUID id, String username);
+    // Department Head approves request:
+    Mono<FormDto> departmentHeadApprove(UUID id, String departmentHead);
 
     // Deny Request Form:
     Mono<FormDto> denyRequest(UUID id, String reason);
 
-    // Approve Request Form:
+    // Benco approves request:
     Mono<FormDto> bencoApprove(UUID id);
 
     // Awards the reimbursement after satisfactory completion of event:

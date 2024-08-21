@@ -33,7 +33,7 @@ public class FormServiceImpl implements FormService {
     private final FormRepository formRepository;
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
-    private final Map<String, MonoSink<ApproverDto>> lookupCorrelationMap;
+    private final Map<String, MonoSink<UserDto>> lookupCorrelationMap;
     private final Map<String, MonoSink<ReimbursementMessageDto>> reimbursementCorrelationMap;
 
     @Autowired
@@ -73,7 +73,7 @@ public class FormServiceImpl implements FormService {
     // Find all active forms for a given User. Filter by Status:
     // TODO: Consider denormalizing data into a separate table to query forms by username. For now we'll just include username as
     // TODO: a Clustering Key so that at least we're searching across partitions using sorted data. Will filter by status using Java since
-    // TODO: result set will always be small
+    // TODO: result set for a single User will always be small
     @Override
     public Flux<FormDto> findAllFormsByUsernameAndStatus(String username, String status) {
         return formRepository.findAllFormsByUsername(username)
@@ -206,37 +206,44 @@ public class FormServiceImpl implements FormService {
 
                     // Otherwise, submit to Supervisor for approval:
                     formDto.setStatus(Status.AWAITING_SUPERVISOR_APPROVAL);
-                    return sendMessageToInbox(id, supervisor.getUsername())
+                    return sendRequestForApproval(id, supervisor.getUsername())
                             .then(formRepository.save(formDto.mapToEntity())
                                     .map(FormDto::new));
                 }));
     }
 
-    // Supervisor approve request:
+    // Supervisor approve request. If the request contained a supervisor pre-approval attachment, the argument passed here
+    // will actually be the requesting user's username rather than the supervisor but they would work for the same Department
+    // and thus have the same Department Head:
     @Override
-    public Mono<FormDto> supervisorApprove(UUID id, String username) {
-        return findById(id).flatMap(formDto -> {
-            if(formDto.getDepartmentHeadAttachment() != null) {
-                return departmentHeadApprove(id, username);
-            }
-            formDto.setStatus(Status.AWAITING_DEPARTMENT_HEAD_APPROVAL);
-            return getApprover(username, Queues.DEPARTMENT_HEAD_LOOKUP, Queues.DEPARTMENT_HEAD_RESPONSE)
-                    .map(departmentHead -> sendMessageToInbox(id, departmentHead.getUsername()))
-                    .then(formRepository.save(formDto.mapToEntity()))
-                    .map(FormDto::new);
-        });
+    public Mono<FormDto> supervisorApprove(UUID id, String supervisor) {
+        return removeRequestFromInbox(id, supervisor)
+                .then(findById(id).flatMap(formDto -> {
+
+                    if(formDto.getDepartmentHeadAttachment() != null) {
+                        return departmentHeadApprove(id, supervisor);
+                    }
+
+                    formDto.setStatus(Status.AWAITING_DEPARTMENT_HEAD_APPROVAL);
+                    return getApprover(supervisor, Queues.DEPARTMENT_HEAD_LOOKUP, Queues.DEPARTMENT_HEAD_RESPONSE)
+                            .map(departmentHead -> sendRequestForApproval(id, departmentHead.getUsername()))
+                            .then(formRepository.save(formDto.mapToEntity()))
+                            .map(FormDto::new);
+                }));
     }
 
-    // Department Head approve request:
+    // Department Head approve request. Again the argument passed here may not be the actual Department Head
+    // but so long as the Benco is responsible for a Department it would resolve the same:
     @Override
-    public Mono<FormDto> departmentHeadApprove(UUID id, String username) {
-        return findById(id).flatMap(formDto -> {
-            formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);
-            return getApprover(username, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE)
-                    .map(benco -> sendMessageToInbox(id, benco.getUsername()))
-                    .then(formRepository.save(formDto.mapToEntity()))
-                    .map(FormDto::new);
-        });
+    public Mono<FormDto> departmentHeadApprove(UUID id, String departmentHead) {
+        return removeRequestFromInbox(id, departmentHead)
+                .then(findById(id).flatMap(formDto -> {
+                    formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);
+                    return getApprover(departmentHead, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE)
+                            .map(benco -> sendRequestForApproval(id, benco.getUsername()))
+                            .then(formRepository.save(formDto.mapToEntity()))
+                            .map(FormDto::new);
+                }));
     }
 
     // Deny Request Form:
@@ -245,7 +252,7 @@ public class FormServiceImpl implements FormService {
         return findById(id).flatMap(formDto -> {
             formDto.setStatus(Status.DENIED);
             formDto.setReasonDenied(reason);
-            return sendMessageToInbox(id, formDto.getUsername())
+            return sendRequestForApproval(id, formDto.getUsername())
                     .then(formRepository.save(formDto.mapToEntity()))
                     .map(FormDto::new);
         });
@@ -254,7 +261,7 @@ public class FormServiceImpl implements FormService {
     // Benco approve request:
     @Override
     public Mono<FormDto> bencoApprove(UUID id) {
-        return findById(id).flatMap(formDto -> sendMessageToInbox(id, formDto.getUsername())
+        return findById(id).flatMap(formDto -> sendRequestForApproval(id, formDto.getUsername())
                 .then(getAdjustedReimbursement(formDto.getUsername(), formDto.getReimbursement()))
                 .flatMap(adjustedReimbursement -> {
                     formDto.setStatus(Status.PENDING);
@@ -268,7 +275,7 @@ public class FormServiceImpl implements FormService {
     public Mono<FormDto> awardReimbursement(UUID id) {
         return findById(id).flatMap(formDto -> {
             formDto.setStatus(Status.APPROVED);
-            return sendMessageToInbox(id, formDto.getUsername())
+            return sendRequestForApproval(id, formDto.getUsername())
                     .then(formRepository.save(formDto.mapToEntity()))
                     .map(FormDto::new);
         });
@@ -296,11 +303,11 @@ public class FormServiceImpl implements FormService {
     // Send message to User-Service to restore balance from Pending form being cancelled by the User. If status is other than Pending no cross-service communication
     //  is needed to cancel a request:
     private Mono<Void> sendCancellationMessage(ReimbursementMessageDto reimbursementMessage) {
-        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.CANCEL_REQUEST.getQueue(), reimbursementMessage));
+        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.CANCEL_REQUEST.toString(), reimbursementMessage));
     }
 
     // Send a request to the User-Service to look up an approver based on the employee's username (direct supervisor, department head, benco):
-    private Mono<ApproverDto> getApprover(String username, Queues lookupQueue, Queues responseQueue) {
+    private Mono<UserDto> getApprover(String username, Queues lookupQueue, Queues responseQueue) {
         return Mono.create(sink -> {
             String correlationId = UUID.randomUUID().toString();
 
@@ -308,9 +315,9 @@ public class FormServiceImpl implements FormService {
             lookupCorrelationMap.put(correlationId, sink);
 
             // Set up the RabbitMQ message to send
-            rabbitTemplate.convertAndSend(lookupQueue.getQueue(), username, message -> {
+            rabbitTemplate.convertAndSend(lookupQueue.toString(), username, message -> {
                 message.getMessageProperties().setCorrelationId(correlationId);
-                message.getMessageProperties().setReplyTo(responseQueue.getQueue());
+                message.getMessageProperties().setReplyTo(responseQueue.toString());
                 return message;
             });
         });
@@ -318,8 +325,8 @@ public class FormServiceImpl implements FormService {
 
     // Return approver to getApprover:
     @RabbitListener(queues = {"supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
-    public Mono<Void> awaitApproverResponse(@Payload ApproverDto approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
-        MonoSink<ApproverDto> sink = lookupCorrelationMap.remove(correlationId);
+    public Mono<Void> awaitApproverResponse(@Payload UserDto approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
+        MonoSink<UserDto> sink = lookupCorrelationMap.remove(correlationId);
         if(sink != null) {
             sink.success(approver);
         }
@@ -333,9 +340,9 @@ public class FormServiceImpl implements FormService {
             reimbursementCorrelationMap.put(correlationId, sink);
 
             ReimbursementMessageDto reimbursementData = new ReimbursementMessageDto(username, reimbursement);
-            rabbitTemplate.convertAndSend(Queues.ADJUSTMENT_REQUEST.getQueue(), reimbursementData, message -> {
+            rabbitTemplate.convertAndSend(Queues.ADJUSTMENT_REQUEST.toString(), reimbursementData, message -> {
                 message.getMessageProperties().setCorrelationId(correlationId);
-                message.getMessageProperties().setReplyTo(Queues.ADJUSTMENT_RESPONSE.getQueue());
+                message.getMessageProperties().setReplyTo(Queues.ADJUSTMENT_RESPONSE.toString());
                 return message;
             });
         });
@@ -351,11 +358,46 @@ public class FormServiceImpl implements FormService {
         return Mono.empty();
     }
 
-    // Send a message to a User's Inbox:
-    private Mono<Void> sendMessageToInbox(UUID formId, String username) {
-        MessageDto message = new MessageDto(formId, username);
-        System.out.println("\n\nSending message to user: " + username + "\n\n");
-        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.INBOX.getQueue(), message));
+    // Send ApprovalRequest to an approver's inbox:
+    private Mono<Void> sendRequestForApproval(UUID formId, String username) {
+        ApprovalRequestDto approvalRequest = new ApprovalRequestDto(formId, username);
+        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.APPROVAL_REQUEST.toString(), approvalRequest));
+    }
+
+    // Send DeletionRequest to clear message from User's inbox:
+    private Mono<Void> removeRequestFromInbox(UUID formId, String username) {
+        ApprovalRequestDto approvalRequest = new ApprovalRequestDto(formId, username);
+        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.DELETION_REQUEST.toString(), approvalRequest));
+    }
+
+    // Handle automatic approvals:
+    @RabbitListener(queues = "automatic-approval-queue")
+    public Mono<Void> handleAutomaticApproval(@Payload ApprovalRequestDto approvalRequest) {
+        return getApprover(approvalRequest.getUsername(), Queues.USER_LOOKUP, Queues.USER_RESPONSE)
+                .map(user -> {
+                    // Username and role should correspond to the user who was supposed to approve the request:
+                    String username = user.getUsername();
+                    String role = user.getRole().toLowerCase();
+                    UUID formId = approvalRequest.getFormId();
+
+                    switch(role) {
+                        case "benco" -> {
+                            return sendEscalationEmail(username);
+                        }
+                        case "department_head" -> {
+                            return departmentHeadApprove(formId, username);
+                        }
+                        default -> {
+                            return supervisorApprove(formId, username);
+                        }
+                    }
+                }).then();
+    }
+
+    // TODO: Actual email implementation may be beyond scope of the project, but will eventually
+    // TODO: look up Benco's supervisor and send message to MessageService:
+    private Mono<Void> sendEscalationEmail(String username) {
+        return Mono.empty();
     }
 
     // Method to perform the actual S3 upload:

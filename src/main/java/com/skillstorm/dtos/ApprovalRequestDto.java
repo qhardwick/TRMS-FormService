@@ -10,7 +10,7 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class MessageDto implements Serializable {
+public class ApprovalRequestDto implements Serializable {
 
     private UUID formId;
     private String username;

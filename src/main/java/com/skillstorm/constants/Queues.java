@@ -1,15 +1,14 @@
 package com.skillstorm.constants;
 
-import lombok.Getter;
-
-@Getter
 public enum Queues {
     // Lookup request queues:
+    USER_LOOKUP("user-lookup-queue"),
     SUPERVISOR_LOOKUP("supervisor-lookup-queue"),
     DEPARTMENT_HEAD_LOOKUP("department-head-lookup-queue"),
     BENCO_LOOKUP("benco-lookup-queue"),
 
     // Lookup response queues:
+    USER_RESPONSE("user-response-queue"),
     SUPERVISOR_RESPONSE("supervisor-response-queue"),
     DEPARTMENT_HEAD_RESPONSE("department-head-response-queue"),
     BENCO_RESPONSE("benco-response-queue"),
@@ -20,7 +19,9 @@ public enum Queues {
     CANCEL_REQUEST("cancel-request-queue"),
 
     // Inbox queues:
-    INBOX("inbox-queue");
+    APPROVAL_REQUEST("approval-request-queue"),
+    DELETION_REQUEST("deletion-request-queue"),
+    AUTO_APPROVAL("automatic-approval-queue");
 
     private final String queue;
 
