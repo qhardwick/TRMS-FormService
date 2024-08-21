@@ -102,7 +102,7 @@ public class RabbitMqConfig {
     // Inbox queues:
     @Bean
     public Queue inboxQueue() {
-        return new Queue(Queues.INBOX.getQueue());
+        return new Queue(Queues.APPROVAL_REQUEST.getQueue());
     }
 
 
@@ -188,7 +188,7 @@ public class RabbitMqConfig {
     public Binding inboxBindibg(Queue inboxQueue, Exchange directExchange) {
         return BindingBuilder.bind(inboxQueue)
                 .to(directExchange)
-                .with(Queues.INBOX.getQueue())
+                .with(Queues.APPROVAL_REQUEST.getQueue())
                 .noargs();
     }
 }

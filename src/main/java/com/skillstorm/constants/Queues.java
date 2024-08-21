@@ -20,7 +20,7 @@ public enum Queues {
     CANCEL_REQUEST("cancel-request-queue"),
 
     // Inbox queues:
-    INBOX("inbox-queue");
+    APPROVAL_REQUEST("approval-request-queue");
 
     private final String queue;
 

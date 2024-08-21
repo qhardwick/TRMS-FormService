@@ -354,8 +354,7 @@ public class FormServiceImpl implements FormService {
     // Send a message to a User's Inbox:
     private Mono<Void> sendMessageToInbox(UUID formId, String username) {
         MessageDto message = new MessageDto(formId, username);
-        System.out.println("\n\nSending message to user: " + username + "\n\n");
-        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.INBOX.getQueue(), message));
+        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.APPROVAL_REQUEST.getQueue(), message));
     }
 
     // Method to perform the actual S3 upload:

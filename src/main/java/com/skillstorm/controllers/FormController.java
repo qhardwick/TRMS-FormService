@@ -173,6 +173,9 @@ public class FormController {
         return formService.bencoApprove(id);
     }
 
+    // User uploads completion attachment after event, proving satisfactory performance:
+
+
     // Awards the reimbursement to the User after satisfactory completion of the event:
     // TODO: Verify that the approver is either a Benco or a Department Head
     // TODO: Consider recalculating reimbursement amount prior to finishing as a simpler means of handling the canceled Pending form scenario
