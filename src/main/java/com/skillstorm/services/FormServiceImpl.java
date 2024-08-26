@@ -34,6 +34,7 @@ public class FormServiceImpl implements FormService {
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
     private final Map<String, MonoSink<UserDto>> lookupCorrelationMap;
+    private final Map<String, MonoSink<ApprovalRequestDto>> approvalRequestCorrelationMap;
     private final Map<String, MonoSink<ReimbursementMessageDto>> reimbursementCorrelationMap;
 
     @Autowired
@@ -42,6 +43,7 @@ public class FormServiceImpl implements FormService {
         this.s3Service =s3Service;
         this.rabbitTemplate = rabbitTemplate;
         this.lookupCorrelationMap = new ConcurrentHashMap<>();
+        this.approvalRequestCorrelationMap = new ConcurrentHashMap<>();
         this.reimbursementCorrelationMap = new ConcurrentHashMap<>();
     }
 
@@ -217,33 +219,33 @@ public class FormServiceImpl implements FormService {
     // and thus have the same Department Head:
     @Override
     public Mono<FormDto> supervisorApprove(UUID id, String supervisor) {
-        return removeRequestFromInbox(id, supervisor)
-                .then(findById(id).flatMap(formDto -> {
-
+        return findById(id)
+                .flatMap(formDto -> {
                     if(formDto.getDepartmentHeadAttachment() != null) {
                         return departmentHeadApprove(id, supervisor);
                     }
 
                     formDto.setStatus(Status.AWAITING_DEPARTMENT_HEAD_APPROVAL);
                     return getApprover(supervisor, Queues.DEPARTMENT_HEAD_LOOKUP, Queues.DEPARTMENT_HEAD_RESPONSE)
-                            .map(departmentHead -> sendRequestForApproval(id, departmentHead.getUsername()))
+                            .flatMap(departmentHead -> sendRequestForApproval(id, departmentHead.getUsername()))
+                            .then(removeRequestFromInbox(id, supervisor))
                             .then(formRepository.save(formDto.mapToEntity()))
                             .map(FormDto::new);
-                }));
+                });
     }
 
     // Department Head approve request. Again the argument passed here may not be the actual Department Head
     // but so long as the Benco is responsible for a Department it would resolve the same:
     @Override
     public Mono<FormDto> departmentHeadApprove(UUID id, String departmentHead) {
-        return removeRequestFromInbox(id, departmentHead)
-                .then(findById(id).flatMap(formDto -> {
+        return findById(id)
+                .flatMap(formDto -> {
                     formDto.setStatus(Status.AWAITING_BENCO_APPROVAL);
                     return getApprover(departmentHead, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE)
-                            .map(benco -> sendRequestForApproval(id, benco.getUsername()))
+                            .flatMap(benco -> sendRequestForApproval(id, benco.getUsername()))
                             .then(formRepository.save(formDto.mapToEntity()))
                             .map(FormDto::new);
-                }));
+                });
     }
 
     // Deny Request Form:
@@ -324,7 +326,7 @@ public class FormServiceImpl implements FormService {
     }
 
     // Return approver to getApprover:
-    @RabbitListener(queues = {"supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
+    @RabbitListener(queues = {"user-response-queue", "supervisor-response-queue", "department-head-response-queue", "benco-response-queue"})
     public Mono<Void> awaitApproverResponse(@Payload UserDto approver, @Header(AmqpHeaders.CORRELATION_ID) String correlationId) {
         MonoSink<UserDto> sink = lookupCorrelationMap.remove(correlationId);
         if(sink != null) {
@@ -360,35 +362,39 @@ public class FormServiceImpl implements FormService {
 
     // Send ApprovalRequest to an approver's inbox:
     private Mono<Void> sendRequestForApproval(UUID formId, String username) {
-        ApprovalRequestDto approvalRequest = new ApprovalRequestDto(formId, username);
+        ApprovalRequestDto approvalRequest = new ApprovalRequestDto(formId, username.toLowerCase());
         return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.APPROVAL_REQUEST.toString(), approvalRequest));
     }
 
     // Send DeletionRequest to clear message from User's inbox:
     private Mono<Void> removeRequestFromInbox(UUID formId, String username) {
-        ApprovalRequestDto approvalRequest = new ApprovalRequestDto(formId, username);
+        ApprovalRequestDto approvalRequest = new ApprovalRequestDto(formId, username.toLowerCase());
         return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.DELETION_REQUEST.toString(), approvalRequest));
     }
 
     // Handle automatic approvals:
+    // TODO: Currently will not  execute without explicitly subscribing. Should revise later to something that follows best practice:
     @RabbitListener(queues = "automatic-approval-queue")
     public Mono<Void> handleAutomaticApproval(@Payload ApprovalRequestDto approvalRequest) {
         return getApprover(approvalRequest.getUsername(), Queues.USER_LOOKUP, Queues.USER_RESPONSE)
                 .map(user -> {
                     // Username and role should correspond to the user who was supposed to approve the request:
-                    String username = user.getUsername();
+                    String username = user.getUsername().toLowerCase();
                     String role = user.getRole().toLowerCase();
                     UUID formId = approvalRequest.getFormId();
 
                     switch(role) {
                         case "benco" -> {
-                            return sendEscalationEmail(username);
+                            return sendEscalationEmail(username)
+                                    .subscribe();
                         }
                         case "department_head" -> {
-                            return departmentHeadApprove(formId, username);
+                            return departmentHeadApprove(formId, username)
+                                    .subscribe();
                         }
                         default -> {
-                            return supervisorApprove(formId, username);
+                            return supervisorApprove(formId, username)
+                                    .subscribe();
                         }
                     }
                 }).then();
