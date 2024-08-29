@@ -34,7 +34,6 @@ public class FormServiceImpl implements FormService {
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
     private final Map<String, MonoSink<UserDto>> lookupCorrelationMap;
-    private final Map<String, MonoSink<ApprovalRequestDto>> approvalRequestCorrelationMap;
     private final Map<String, MonoSink<ReimbursementMessageDto>> reimbursementCorrelationMap;
 
     @Autowired
@@ -43,7 +42,6 @@ public class FormServiceImpl implements FormService {
         this.s3Service =s3Service;
         this.rabbitTemplate = rabbitTemplate;
         this.lookupCorrelationMap = new ConcurrentHashMap<>();
-        this.approvalRequestCorrelationMap = new ConcurrentHashMap<>();
         this.reimbursementCorrelationMap = new ConcurrentHashMap<>();
     }
 
