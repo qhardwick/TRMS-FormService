@@ -108,6 +108,12 @@ public class FormController {
         return formService.uploadDepartmentHeadAttachment(id, contentType, attachment);
     }
 
+    // Upload completion attachment after event, proving satisfactory performance:
+    @PostMapping("{id}/completion-attachment")
+    public Mono<FormDto> submitCompletionAttachment(@PathVariable("id") UUID id, @RequestHeader("Content-Type") String contentType, @RequestBody byte[] completionAttachment) {
+        return formService.submitCompletionAttachment(id, contentType, completionAttachment);
+    }
+
     // Download Event attachment from S3:
     @GetMapping("/{id}/attachment")
     public Mono<ResponseEntity<Resource>> downloadEventAttachment(@PathVariable("id") UUID id) {
@@ -172,9 +178,6 @@ public class FormController {
     public Mono<FormDto> bencoApproval(@PathVariable("id") UUID id, @RequestHeader("username") String benco) {
         return formService.bencoApprove(id);
     }
-
-    // User uploads completion attachment after event, proving satisfactory performance:
-
 
     // Awards the reimbursement to the User after satisfactory completion of the event:
     // TODO: Verify that the approver is either a Benco or a Department Head

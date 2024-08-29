@@ -92,6 +92,9 @@ public class FormDto {
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private BigDecimal reimbursement;
 
+    @Pattern(regexp = "^\\S+\\.(pdf|png|jpe?g|txt|doc|msg|pptx|ppsx)$", message = "{completion.attachment.invalid}")
+    private String completionAttachment;
+
     public FormDto() {
         this.id = UUID.randomUUID();
         this.status = Status.CREATED;
@@ -121,6 +124,7 @@ public class FormDto {
         this.reasonDenied = form.getReasonDenied();
         this.excessFundsApproved = form.isExcessFundsApproved();
         this.reimbursement = form.getReimbursement();
+        this.completionAttachment = form.getCompletionAttachment();
     }
 
     @JsonIgnore
@@ -149,6 +153,7 @@ public class FormDto {
         form.setReasonDenied(reasonDenied);
         form.setExcessFundsApproved(excessFundsApproved);
         form.setReimbursement(getReimbursement());
+        form.setCompletionAttachment(completionAttachment);
 
         return form;
     }
@@ -163,7 +168,7 @@ public class FormDto {
     // If no passingGrade was supplied, use the default defined in GradeFormat:
     public String getPassingGrade() {
         if(passingGrade == null) {
-            return gradeFormat.getDefaultScore();
+            return gradeFormat.getPassingScore();
         }
         return passingGrade;
     }

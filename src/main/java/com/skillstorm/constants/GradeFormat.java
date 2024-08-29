@@ -6,9 +6,9 @@ import lombok.Getter;
 public enum GradeFormat {
     SCORE("70"), PRESENTATION("presentation"), PASS_FAIL("pass"), OTHER("presentation");
 
-    private final String defaultScore;
+    private final String passingScore;
 
-    GradeFormat(String defaultScore) {
-        this.defaultScore = defaultScore;
+    GradeFormat(String passingScore) {
+        this.passingScore = passingScore;
     }
 }
