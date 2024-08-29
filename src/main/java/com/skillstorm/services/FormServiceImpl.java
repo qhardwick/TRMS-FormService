@@ -5,6 +5,7 @@ import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.constants.Queues;
 import com.skillstorm.constants.Status;
 import com.skillstorm.dtos.*;
+import com.skillstorm.entities.Form;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.InsufficientNoticeException;
 import com.skillstorm.exceptions.RequestAlreadyAwardedException;
@@ -175,6 +176,22 @@ public class FormServiceImpl implements FormService {
         }));
     }
 
+    private Mono<FormDto> uploadCompletionAttachment(UUID id, String contentType, byte[] completionAttachment) {
+
+        // Verify attachment it of type pptx or ppsx:
+        if( "application/vnd.openxmlformats-officedocument.presentationml.presentation".equalsIgnoreCase(contentType) || "application/vnd.openxmlformats-officedocument.presentationml.slideshow".equalsIgnoreCase(contentType)) {
+            return findById(id).flatMap(formDto -> uploadToS3(contentType, completionAttachment)
+                    .flatMap(key -> {
+                        formDto.setAttachment(key);
+                        return formRepository.save(formDto.mapToEntity())
+                                .map(FormDto::new);
+                    }));
+        }
+
+        // Handle unsupported file format:
+        return Mono.error(new UnsupportedFileTypeException("attachment.format.must"));
+    }
+
     // Download Event attachment from S3:
     @Override
     public Mono<DownloadResponseDto> downloadEventAttachment(UUID id) {
@@ -298,6 +315,29 @@ public class FormServiceImpl implements FormService {
             return sendCancellationMessage(reimbursementMessage)
                     .then(formRepository.deleteById(id));
         });
+    }
+
+    // Submit completion attachment:
+    @Override
+    public Mono<FormDto> submitCompletionAttachment(UUID id, String contentType, byte[] completionAttachment) {
+        return uploadCompletionAttachment(id, contentType, completionAttachment)
+                .flatMap(formDto -> {
+                    String username = formDto.getUsername();
+                    String passingScore = formDto.getGradeFormat().getPassingScore();
+
+                    // Events requiring Presentations are approved by the employee's Direct Supervisor, otherwise they are approved by the
+                    // Benco:
+                    Mono<UserDto> approverMono = "presentation".equalsIgnoreCase(passingScore) ? getApprover(username, Queues.SUPERVISOR_LOOKUP, Queues.SUPERVISOR_RESPONSE)
+                            : getApprover(username, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE);
+
+                    return approverMono.flatMap(approver -> sendCompletionVerificationRequest(id, approver.getUsername()))
+                            .thenReturn(formDto);
+                });
+    }
+
+    private Mono<Void> sendCompletionVerificationRequest(UUID id, String approver) {
+        ApprovalRequestDto approvalRequest = new ApprovalRequestDto(id, approver);
+        return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.COMPLETION_VERIFICATION.toString(), approver));
     }
 
     // Send message to User-Service to restore balance from Pending form being cancelled by the User. If status is other than Pending no cross-service communication

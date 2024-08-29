@@ -77,4 +77,7 @@ public interface FormService {
 
     // Cancel a Reimbursement Request:
     Mono<Void> cancelRequest(UUID id);
+
+    // Submit completion attachment:
+    Mono<FormDto> submitCompletionAttachment(UUID id, String contentType, byte[] completionAttachment);
 }

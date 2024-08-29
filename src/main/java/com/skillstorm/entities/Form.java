@@ -77,4 +77,7 @@ public class Form {
     private boolean excessFundsApproved;
 
     private BigDecimal reimbursement;
+
+    @Column("completion_attachment")
+    private String completionAttachment;
 }

@@ -123,6 +123,8 @@ public class RabbitMqConfig {
         return new Queue(Queues.AUTO_APPROVAL.toString());
     }
 
+    @Bean Queue completionVerificationQueue() { return new Queue(Queues.COMPLETION_VERIFICATION.toString()); }
+
 
     // Bind the queues to the exchange:
 
@@ -239,6 +241,14 @@ public class RabbitMqConfig {
         return BindingBuilder.bind(automaticApprovalQueue)
                 .to(directExchange)
                 .with(Queues.AUTO_APPROVAL)
+                .noargs();
+    }
+
+    @Bean
+    public Binding completionVerificationBinding(Queue completionVerificationQueue, Exchange directExchange) {
+        return BindingBuilder.bind(completionVerificationQueue)
+                .to(directExchange)
+                .with(Queues.COMPLETION_VERIFICATION)
                 .noargs();
     }
 }

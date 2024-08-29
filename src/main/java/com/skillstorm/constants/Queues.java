@@ -21,7 +21,8 @@ public enum Queues {
     // Inbox queues:
     APPROVAL_REQUEST("approval-request-queue"),
     DELETION_REQUEST("deletion-request-queue"),
-    AUTO_APPROVAL("automatic-approval-queue");
+    AUTO_APPROVAL("automatic-approval-queue"),
+    COMPLETION_VERIFICATION("completion-verification-queue");
 
     private final String queue;
 
