@@ -2,7 +2,7 @@
 
 ## Project Description
 The Form Service API for the Tuition Reimbursement Management System manages form data for the application. Users submit reimbursement request forms for business-relevant events they
-would like to attend, including what it costs and how it relates to company business and then a hierarchy of approvers either grant or deny the request.
+would like to attend, including what it costs and how it relates to company business and then a hierarchy of approvers either grant or deny the request. Developed using an asynchrounous, non-blocking architecture.
 
 ## Technologies Used
 ![](https://img.shields.io/badge/-Java-007396?style=flat-square&logo=java&logoColor=white)
