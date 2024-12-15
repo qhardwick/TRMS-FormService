@@ -1,5 +1,6 @@
 package com.skillstorm.controllers;
 
+import com.skillstorm.constants.AttachmentType;
 import com.skillstorm.constants.EventType;
 import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.constants.Status;
@@ -90,63 +91,6 @@ public class FormController {
         return formService.getAllStatuses();
     }
 
-    // Upload Event attachment to S3:
-    @PostMapping("/{id}/attachment")
-    public Mono<FormDto> uploadEventAttachment(@PathVariable("id") UUID id, @RequestHeader("Content-Type") String contentType, @RequestBody byte[] attachment) {
-        return formService.uploadEventAttachment(id, contentType, attachment);
-    }
-
-    // Upload Supervisor preapproval to S3:
-    @PostMapping("/{id}/supervisor-attachment")
-    public Mono<FormDto> uploadSupervisorAttachment(@PathVariable("id") UUID id, @RequestHeader("Content-Type") String contentType, @RequestBody byte[] attachment) {
-        return formService.uploadSupervisorAttachment(id, contentType, attachment);
-    }
-
-    // Upload Department Head preapproval to S3:
-    @PostMapping("/{id}/department-head-attachment")
-    public Mono<FormDto> uploadDepartmentHeadAttachment(@PathVariable("id") UUID id, @RequestHeader("Content-Type") String contentType, @RequestBody byte[] attachment) {
-        return formService.uploadDepartmentHeadAttachment(id, contentType, attachment);
-    }
-
-    // Upload completion attachment after event, proving satisfactory performance:
-    @PostMapping("{id}/completion-attachment")
-    public Mono<FormDto> submitCompletionAttachment(@PathVariable("id") UUID id, @RequestHeader("Content-Type") String contentType, @RequestBody byte[] completionAttachment) {
-        return formService.submitCompletionAttachment(id, contentType, completionAttachment);
-    }
-
-    // Download Event attachment from S3:
-    @GetMapping("/{id}/attachment")
-    public Mono<ResponseEntity<Resource>> downloadEventAttachment(@PathVariable("id") UUID id) {
-        return formService.downloadEventAttachment(id).map(downloadResponse -> {
-            InputStream inputStream = downloadResponse.getInputStream();
-            String contentType = downloadResponse.getContentType();
-            InputStreamResource resource = new InputStreamResource(inputStream);
-            return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType)).body(resource);
-        });
-    }
-
-    // Download Supervisor preapproval from S3:
-    @GetMapping("/{id}/supervisor-attachment")
-    public Mono<ResponseEntity<Resource>> downloadSupervisorAttachment(@PathVariable("id") UUID id) {
-        return formService.downloadSupervisorAttachment(id).map(downloadResponse -> {
-            InputStream inputStream = downloadResponse.getInputStream();
-            String contentType = downloadResponse.getContentType();
-            InputStreamResource resource = new InputStreamResource(inputStream);
-            return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType)).body(resource);
-        });
-    }
-
-    // Download Department Head preapproval from S3:
-    @GetMapping("/{id}/department-head-attachment")
-    public Mono<ResponseEntity<Resource>> downloadDepartmentHeadAttachment(@PathVariable("id") UUID id) {
-        return formService.downloadDepartmentHeadAttachment(id).map(downloadResponse -> {
-            InputStream inputStream = downloadResponse.getInputStream();
-            String contentType = downloadResponse.getContentType();
-            InputStreamResource resource = new InputStreamResource(inputStream);
-            return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType)).body(resource);
-        });
-    }
-
     // Submit Form for Approval:
     @PutMapping("/{id}/submit")
     public Mono<FormDto> submit(@PathVariable("id") UUID id, @RequestHeader("username") String username) {
@@ -192,5 +136,16 @@ public class FormController {
     @DeleteMapping("/{id}/cancel")
     public Mono<Void> cancelRequest(@PathVariable("id") UUID id) {
         return formService.cancelRequest(id);
+    }
+
+    @PostMapping("/{id}/attachments/url")
+    public Mono<String> generateUploadUrl(@PathVariable("id") UUID id, @RequestParam String contentType,
+                                          @RequestParam AttachmentType attachmentType) {
+        return formService.generateUploadUrl(id,contentType, attachmentType);
+    }
+
+    @GetMapping("/{id}/attachments/url")
+    public Mono<String> generateDownloadUrl(@PathVariable("id") UUID id, @RequestParam AttachmentType attachmentType) {
+        return formService.generateDownloadUrl(id, attachmentType);
     }
 }

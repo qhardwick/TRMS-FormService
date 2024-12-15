@@ -1,11 +1,7 @@
 package com.skillstorm.services;
 
-import com.skillstorm.constants.EventType;
-import com.skillstorm.constants.GradeFormat;
-import com.skillstorm.constants.Queues;
-import com.skillstorm.constants.Status;
+import com.skillstorm.constants.*;
 import com.skillstorm.dtos.*;
-import com.skillstorm.entities.Form;
 import com.skillstorm.exceptions.FormNotFoundException;
 import com.skillstorm.exceptions.InsufficientNoticeException;
 import com.skillstorm.exceptions.RequestAlreadyAwardedException;
@@ -25,6 +21,7 @@ import reactor.core.publisher.MonoSink;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -123,91 +120,6 @@ public class FormServiceImpl implements FormService {
     @Override
     public Flux<Status> getAllStatuses() {
         return Flux.fromArray(Status.values());
-    }
-
-    // Upload Event attachment to S3:
-    @Override
-    public Mono<FormDto> uploadEventAttachment(UUID id, String contentType, byte[] attachment) {
-
-        // Verify attachment it of type pdf, png, jpeg, txt, or doc:
-        return switch (contentType) {
-            case "application/pdf", "image/png", "image/jpg", "image/jpeg", "text/plain",
-                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ->
-                    findById(id).flatMap(formDto -> uploadToS3(contentType, attachment).flatMap(key -> {
-                        formDto.setAttachment(key);
-                        return formRepository.save(formDto.mapToEntity()).map(FormDto::new);
-                    }));
-
-            // Handle unsupported file format:
-            default ->
-                Mono.error(new UnsupportedFileTypeException("attachment.format.must"));
-        };
-    }
-
-    // Upload Supervisor pre-approval attachment to S3:
-    @Override
-    public Mono<FormDto> uploadSupervisorAttachment(UUID id, String contentType, byte[] attachment) {
-
-        // Verify attachment is of type .msg:
-        if(!"application/vnd.ms-outlook".equalsIgnoreCase(contentType)) {
-            return Mono.error(new UnsupportedFileTypeException("file.msg.must"));
-        }
-
-        // Upload the attachment to S3 and set the key:
-        return findById(id).flatMap(formDto -> uploadToS3(contentType, attachment).flatMap(key -> {
-            formDto.setSupervisorAttachment(key);
-            return formRepository.save(formDto.mapToEntity()).map(FormDto::new);
-        }));
-    }
-
-    // Upload Department Head pre-approval attachment to S3:
-    @Override
-    public Mono<FormDto> uploadDepartmentHeadAttachment(UUID id, String contentType, byte[] attachment) {
-
-        // Verify attachment is of type .msg:
-        if(!"application/vnd.ms-outlook".equalsIgnoreCase(contentType)) {
-            return Mono.error(new UnsupportedFileTypeException("file.msg.must"));
-        }
-
-        // Upload the attachment to S3 and set the key:
-        return findById(id).flatMap(formDto -> uploadToS3(contentType, attachment).flatMap(key -> {
-            formDto.setDepartmentHeadAttachment(key);
-            return formRepository.save(formDto.mapToEntity()).map(FormDto::new);
-        }));
-    }
-
-    private Mono<FormDto> uploadCompletionAttachment(UUID id, String contentType, byte[] completionAttachment) {
-
-        // Verify attachment it of type pptx or ppsx:
-        if( "application/vnd.openxmlformats-officedocument.presentationml.presentation".equalsIgnoreCase(contentType) || "application/vnd.openxmlformats-officedocument.presentationml.slideshow".equalsIgnoreCase(contentType)) {
-            return findById(id).flatMap(formDto -> uploadToS3(contentType, completionAttachment)
-                    .flatMap(key -> {
-                        formDto.setAttachment(key);
-                        return formRepository.save(formDto.mapToEntity())
-                                .map(FormDto::new);
-                    }));
-        }
-
-        // Handle unsupported file format:
-        return Mono.error(new UnsupportedFileTypeException("attachment.format.must"));
-    }
-
-    // Download Event attachment from S3:
-    @Override
-    public Mono<DownloadResponseDto> downloadEventAttachment(UUID id) {
-        return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getAttachment()));
-    }
-
-    // Download Supervisor attachment from S3:
-    @Override
-    public Mono<DownloadResponseDto> downloadSupervisorAttachment(UUID id) {
-        return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getSupervisorAttachment()));
-    }
-
-    // Download Department Head attachment from S3:
-    @Override
-    public Mono<DownloadResponseDto> downloadDepartmentHeadAttachment(UUID id) {
-        return findById(id).flatMap(formDto -> s3Service.getObject(formDto.getDepartmentHeadAttachment()));
     }
 
     // Submit Form for Supervisor Approval:
@@ -317,24 +229,6 @@ public class FormServiceImpl implements FormService {
         });
     }
 
-    // Submit completion attachment:
-    @Override
-    public Mono<FormDto> submitCompletionAttachment(UUID id, String contentType, byte[] completionAttachment) {
-        return uploadCompletionAttachment(id, contentType, completionAttachment)
-                .flatMap(formDto -> {
-                    String username = formDto.getUsername();
-                    String passingScore = formDto.getGradeFormat().getPassingScore();
-
-                    // Events requiring Presentations are approved by the employee's Direct Supervisor, otherwise they are approved by the
-                    // Benco:
-                    Mono<UserDto> approverMono = "presentation".equalsIgnoreCase(passingScore) ? getApprover(username, Queues.SUPERVISOR_LOOKUP, Queues.SUPERVISOR_RESPONSE)
-                            : getApprover(username, Queues.BENCO_LOOKUP, Queues.BENCO_RESPONSE);
-
-                    return approverMono.flatMap(approver -> sendCompletionVerificationRequest(id, approver.getUsername()))
-                            .thenReturn(formDto);
-                });
-    }
-
     private Mono<Void> sendCompletionVerificationRequest(UUID id, String approver) {
         ApprovalRequestDto approvalRequest = new ApprovalRequestDto(id, approver);
         return Mono.fromRunnable(() -> rabbitTemplate.convertAndSend(Queues.COMPLETION_VERIFICATION.toString(), approver));
@@ -411,7 +305,7 @@ public class FormServiceImpl implements FormService {
     }
 
     // Handle automatic approvals:
-    // TODO: Currently will not  execute without explicitly subscribing. Should revise later to something that follows best practice:
+    // TODO: Currently will not execute without explicitly subscribing. Should revise later to something that follows best practice:
     @RabbitListener(queues = "automatic-approval-queue")
     public Mono<Void> handleAutomaticApproval(@Payload ApprovalRequestDto approvalRequest) {
         return getApprover(approvalRequest.getUsername(), Queues.USER_LOOKUP, Queues.USER_RESPONSE)
@@ -444,12 +338,68 @@ public class FormServiceImpl implements FormService {
         return Mono.empty();
     }
 
-    // Method to perform the actual S3 upload:
-    private Mono<String> uploadToS3(String contentType, byte[] attachment) {
-        return Mono.defer(() -> {
-            String key = UUID.randomUUID().toString();
-            return s3Service.uploadFile(key, contentType, attachment)
-                    .thenReturn(key);
+    // Generate a pre-signed URL to allow user to upload file directly to S3 from their own machine:
+    @Override
+    public Mono<String> generateUploadUrl(UUID formId, String contentType, AttachmentType attachmentType) {
+        // Verify file type is appropriate for the type of attachment:
+        if(!isValidContentType(contentType, attachmentType)) {
+            return Mono.error(new UnsupportedFileTypeException("Invalid content type"));
+        }
+
+        // Look up the Form we want to attach our file to, and use it to generate a unique key for S3:
+        return findById(formId).flatMap(formDto -> {
+            String key = generateS3Key(formId, attachmentType);
+
+            // Generate the pre-signed url and update the form so that it contains a reference to the key:
+            return s3Service.generateUploadUrl(key, contentType).flatMap(url -> {
+                updateAttachmentKey(formDto, key, attachmentType);
+
+                // Save the updated form in the database and return the url in the response:
+                return formRepository.save(formDto.mapToEntity())
+                        .thenReturn(url);
+            });
+        });
+    }
+
+    // Use the attachment type to set the appropriate attachment field with the file's s3 bucket key:
+    private void updateAttachmentKey(FormDto formDto, String key, AttachmentType attachmentType) {
+        switch (attachmentType) {
+            case EVENT -> formDto.setAttachment(key);
+            case SUPERVISOR_APPROVAL -> formDto.setSupervisorAttachment(key);
+            case DEPARTMENT_HEAD_APPROVAL -> formDto.setDepartmentHeadAttachment(key);
+            case PROOF_OF_COMPLETION -> formDto.setCompletionAttachment(key);
+        }
+    }
+
+    // Generate a unique key for the object to be stored in S3:
+    private String generateS3Key(UUID formId, AttachmentType attachmentType) {
+        return String.format("%s%s%s", formId, attachmentType.name().toLowerCase(), UUID.randomUUID());
+    }
+
+    // Method to verify user file is acceptable content type:
+    private boolean isValidContentType(String contentType, AttachmentType attachmentType) {
+        return switch (attachmentType) {
+            case EVENT -> Set.of("application/pdf", "image/png", "image/jpg", "image/jpeg", "text/plain",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                            .contains(contentType);
+
+            case SUPERVISOR_APPROVAL, DEPARTMENT_HEAD_APPROVAL ->
+                    "application/vnd.ms-outlook".equalsIgnoreCase(contentType);
+
+            case PROOF_OF_COMPLETION -> Set.of("application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "application/vnd.openxmlformats-officedocument.presentationml.slideshow")
+                    .contains(contentType);
+        };
+    }
+
+    // Generate a pre-signed URL to allow user to download file from S3:
+    @Override
+    public Mono<String> generateDownloadUrl(UUID id, AttachmentType attachmentType) {
+        return findById(id).flatMap(formDto -> switch(attachmentType) {
+            case EVENT -> s3Service.generateDownloadUrl(formDto.getAttachment());
+            case SUPERVISOR_APPROVAL -> s3Service.generateDownloadUrl(formDto.getSupervisorAttachment());
+            case DEPARTMENT_HEAD_APPROVAL -> s3Service.generateDownloadUrl(formDto.getDepartmentHeadAttachment());
+            case PROOF_OF_COMPLETION -> s3Service.generateDownloadUrl(formDto.getCompletionAttachment());
         });
     }
 }

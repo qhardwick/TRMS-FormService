@@ -1,5 +1,6 @@
 package com.skillstorm.services;
 
+import com.skillstorm.constants.AttachmentType;
 import com.skillstorm.constants.EventType;
 import com.skillstorm.constants.GradeFormat;
 import com.skillstorm.constants.Status;
@@ -39,24 +40,6 @@ public interface FormService {
     // Get all Statuses:
     Flux<Status> getAllStatuses();
 
-    // Upload Event attachment to S3:
-    Mono<FormDto> uploadEventAttachment(UUID id, String contentType, byte[] attachment);
-
-    // Upload Supervisor pre-approval attachment to S3:
-    Mono<FormDto> uploadSupervisorAttachment(UUID id, String contentType, byte[] attachment);
-
-    // Upload Department Head pre-approval attachment to S3:
-    Mono<FormDto> uploadDepartmentHeadAttachment(UUID id, String contentType, byte[] attachment);
-
-    // Download Event attachment from S3:
-    Mono<DownloadResponseDto> downloadEventAttachment(UUID id);
-
-    // Download Supervisor attachment from S3:
-    Mono<DownloadResponseDto> downloadSupervisorAttachment(UUID id);
-
-    // Download Department Head attachment from S3:
-    Mono<DownloadResponseDto> downloadDepartmentHeadAttachment(UUID id);
-
     // Submit Form for Supervisor Approval:
     Mono<FormDto> submitForApproval(UUID id, String username);
 
@@ -78,6 +61,9 @@ public interface FormService {
     // Cancel a Reimbursement Request:
     Mono<Void> cancelRequest(UUID id);
 
-    // Submit completion attachment:
-    Mono<FormDto> submitCompletionAttachment(UUID id, String contentType, byte[] completionAttachment);
+    // Generate a pre-signed URL to allow user to upload file directly to S3 from their own machine:
+    Mono<String> generateUploadUrl(UUID formId, String contentType, AttachmentType attachmentType);
+
+    // Generate a pre-signed URL to allow user to download file from S3:
+    Mono<String> generateDownloadUrl(UUID id, AttachmentType attachmentType);
 }
