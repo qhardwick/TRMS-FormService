@@ -10,7 +10,7 @@
     </parent>
 
     <groupId>com.skillstorm</groupId>
-    <artifactId>UserService</artifactId>
+    <artifactId>FormService</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>FormService</name>
     <description>Handles form data for Tuition Reimbursement Management System</description>
@@ -31,6 +31,15 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Ensures AWS SDK dependencies compatible with specified version -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>2.26.1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -67,6 +76,12 @@
             <version>4.0.6</version>
         </dependency>
 
+        <!-- AWS S3 SDK -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
         <!-- Gives us Spring Security. Even if in a secure environment we may still want to use
         some of the method-level annotations -->
         <dependency>
@@ -84,6 +99,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- Core dependency for RabbitMQ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
 
         <!-- Allows us to register with Eureka server for discovery -->
@@ -139,6 +160,13 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testing dependency for RabbitMQ -->
+        <dependency>
+            <groupId>org.springframework.amqp</groupId>
+            <artifactId>spring-rabbit-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

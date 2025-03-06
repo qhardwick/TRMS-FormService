@@ -27,11 +27,15 @@ spring:
     ansi:
       enabled: always
 
+# Configure Rabbit exchanges, queues, and routing keys:
+exchanges:
+  direct: direct-exchange
+
 # Configure logging levels:
 logging:
   level:
     org:
-      springframework: INFO
+      springframework: DEBUG
     com:
       datastax: ERROR
     io:
